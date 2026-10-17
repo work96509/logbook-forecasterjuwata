@@ -1,0 +1,2767 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    
+    <!-- SYSTEM ANTI-CACHE AGAR BROWSER HP SELALU MEMUAT VERSI TERBARU -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    
+    <title>Logbook Forecaster Juwata v1.0</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- jsPDF & AutoTable -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+    <!-- Signature Pad -->
+    <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
+
+    <!-- Flatpickr -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script src="https://npmcdn.com/flatpickr/dist/l10n/id.js"></script>
+
+    <!-- Firebase Compat SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
+
+    <style>
+        /* MENCEGAH BUG DOUBLE-TAP DAN BLINKING DI LAYAR SENTUH */
+        a, button, label, input, select, .cursor-pointer {
+            touch-action: manipulation;
+        }
+        .select-none {
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        /* Background Grid Blueprint 2 x 2 cm, Opacity 20% */
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 100vh;
+            background-color: #E5E5F7;
+        }
+
+        body::before {
+            content: "";
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #E5E5F7;
+            opacity: 0.2;
+            background-image: linear-gradient(#444CF7 1.5px, transparent 1.5px), linear-gradient(to right, #444CF7 1.5px, #E5E5F7 1.5px);
+            background-size: 76px 76px;
+            z-index: -1;
+            pointer-events: none;
+        }
+
+        .glass-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
+        }
+        .custom-dropdown-list { max-height: 200px; overflow-y: auto; z-index: 50; }
+        .signature-wrapper { 
+            border: 2px dashed #94a3b8; 
+            border-radius: 0.75rem; 
+            background: #f8fafc; 
+            position: relative; 
+            width: 200px;
+            height: 200px;
+            margin: 0 auto;
+            touch-action: none; 
+        }
+        canvas#signaturePad { width: 100%; height: 100%; border-radius: 0.75rem; cursor: crosshair; touch-action: none; }
+        
+        .flatpickr-input[readonly] { background-color: #ffffff !important; text-align: center !important; }
+
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        input[type="number"] { -moz-appearance: textfield; }
+
+        .table-scroll-container::-webkit-scrollbar { width: 6px; height: 6px; }
+        .table-scroll-container::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 8px; }
+        .table-scroll-container::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 8px; }
+        .table-scroll-container::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        .dropzone-border { border: 2px dashed #3b82f6; background-color: #eff6ff; transition: all 0.3s ease; }
+        .dropzone-border:hover, .dropzone-border.drag-over { background-color: #dbeafe; border-color: #1d4ed8; }
+    </style>
+    
+    <script>
+        // Mencegat fungsi .value pada Dropdown HTML Asli agar tersinkron otomatis ke Desain Kustom
+        const originalSelectDesc = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value');
+        Object.defineProperty(HTMLSelectElement.prototype, 'value', {
+            get: function() { return originalSelectDesc.get.call(this); },
+            set: function(val) {
+                originalSelectDesc.set.call(this, val);
+                this.dispatchEvent(new Event('sync-custom-select'));
+            }
+        });
+    </script>
+</head>
+<body class="text-gray-800 pb-20 relative">
+
+<!-- ================= MODAL GLOBAL KUSTOM ================= -->
+<div id="modalAlert" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[500] hidden flex items-center justify-center p-4 transition-opacity duration-300 opacity-0">
+    <div class="bg-white rounded-2xl max-w-sm w-full p-6 text-center shadow-2xl border border-gray-100 transform scale-95 transition-transform duration-300" id="alertBox">
+        <div id="alertIcon"></div>
+        <h3 id="alertTitle" class="text-xl font-bold text-gray-800 mb-2"></h3>
+        <p id="alertMessage" class="text-sm text-gray-600 mb-6 leading-relaxed"></p>
+        <button type="button" id="btnAlertOK" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition focus:outline-none focus:ring-4 focus:ring-blue-300">OK</button>
+    </div>
+</div>
+
+<div id="modalConfirm" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[500] hidden flex items-center justify-center p-4 transition-opacity duration-300 opacity-0">
+    <div class="bg-white rounded-2xl max-w-sm w-full p-6 text-center shadow-2xl border border-gray-100 transform scale-95 transition-transform duration-300" id="confirmBox">
+        <div class="w-16 h-16 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl"><i class="fa-solid fa-circle-question"></i></div>
+        <h3 id="confirmTitle" class="text-xl font-bold text-gray-800 mb-2"></h3>
+        <p id="confirmMessage" class="text-sm text-gray-600 mb-6 leading-relaxed"></p>
+        <div class="flex gap-3">
+            <button type="button" id="btnConfirmNo" class="w-1/2 bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-3 px-4 rounded-xl transition focus:outline-none focus:ring-4 focus:ring-gray-300">Batal</button>
+            <button type="button" id="btnConfirmYes" class="w-1/2 bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition focus:outline-none focus:ring-4 focus:ring-red-300">Ya</button>
+        </div>
+    </div>
+</div>
+
+<div id="modalPrompt" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[500] hidden flex items-center justify-center p-4 transition-opacity duration-300 opacity-0">
+    <div class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-gray-100 transform scale-95 transition-transform duration-300" id="promptBox">
+        <div class="flex items-center gap-3 mb-4">
+            <div class="w-10 h-10 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-xl"><i class="fa-solid fa-keyboard"></i></div>
+            <h3 id="promptTitle" class="text-lg font-bold text-gray-800"></h3>
+        </div>
+        <p id="promptMessage" class="text-sm text-gray-600 mb-3 leading-relaxed"></p>
+        <input type="text" id="promptInput" class="w-full border border-gray-300 rounded-xl p-3 focus:ring-2 focus:ring-blue-400 focus:outline-none mb-6 shadow-sm text-sm font-semibold" autocomplete="off">
+        <div class="flex gap-3">
+            <button type="button" id="btnPromptBatal" class="w-1/2 bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-3 px-4 rounded-xl transition focus:outline-none focus:ring-4 focus:ring-gray-300">Batal</button>
+            <button type="button" id="btnPromptSimpan" class="w-1/2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition focus:outline-none focus:ring-4 focus:ring-blue-300">Simpan</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL AI SETTINGS (GEMINI ONLY) -->
+<div id="modalAiSettings" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[500] hidden flex items-center justify-center p-4 transition-opacity duration-300 opacity-0">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-gray-100 transform scale-95 transition-transform duration-300" id="aiSettingsBox">
+        <div class="flex items-center gap-3 mb-4 border-b pb-3">
+            <div class="w-10 h-10 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-xl"><i class="fa-solid fa-microchip"></i></div>
+            <div>
+                <h3 class="text-lg font-bold text-gray-800">Pengaturan API Key</h3>
+                <p class="text-xs text-gray-500">Masukkan kunci API Google Gemini Anda</p>
+            </div>
+        </div>
+
+        <div class="space-y-4 mb-6">
+            <div>
+                <label class="block text-xs font-bold text-gray-700 mb-1">API Key Resmi (Google AI Studio):</label>
+                <!-- type="text" agar tulisan terlihat tanpa titik-titik -->
+                <input type="text" id="inputApiKeyField" class="w-full border border-gray-300 rounded-xl p-3 focus:ring-2 focus:ring-blue-400 focus:outline-none text-sm font-mono" placeholder="Tempel API Key di sini..." autocomplete="off">
+                <p class="text-[11px] text-gray-400 mt-1 italic">*Data tersimpan aman di Cloud Database Stasiun.</p>
+            </div>
+        </div>
+
+        <div class="flex gap-3">
+            <button type="button" id="btnBatalAiSettings" onclick="closeAiSettingsModal()" class="w-1/2 bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-3 px-4 rounded-xl transition">Batal</button>
+            <button type="button" id="btnSimpanAiSettings" onclick="saveAiSettings()" class="w-1/2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition">Simpan Pengaturan</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Kelola Nama Forecaster -->
+<div id="modalManageNames" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[300] hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-gray-100 flex flex-col max-h-[90vh]">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-bold text-gray-800"><i class="fa-solid fa-users-gear text-blue-600 mr-2"></i>Kelola Nama Forecaster</h3>
+            <button type="button" onclick="closeManageNamesModal()" class="text-gray-400 hover:text-red-500 transition text-xl"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        
+        <div class="flex gap-2 mb-4">
+            <input type="text" id="newForecasterName" class="flex-1 border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-400 focus:outline-none text-sm font-normal text-black" placeholder="Ketik nama forecaster baru..." autocomplete="off">
+            <button type="button" onclick="addPresetName()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 rounded-lg text-sm font-bold transition shadow-sm"><i class="fa-solid fa-plus mr-1"></i> Tambah</button>
+        </div>
+
+        <div class="overflow-y-auto flex-1 bg-gray-50 rounded-xl border border-gray-200 p-2 table-scroll-container">
+            <ul id="manageNamesList" class="space-y-1"></ul>
+        </div>
+        
+        <div class="mt-5 text-right">
+            <button type="button" onclick="closeManageNamesModal()" class="w-full bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-3 rounded-xl font-bold transition">Selesai</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Pop-up Warning Sif Sudah Terisi -->
+<div id="modalSifAda" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[500] hidden flex items-center justify-center p-4 transition-opacity duration-300 opacity-0">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 text-center shadow-2xl border border-gray-100 transform scale-95 transition-transform duration-300" id="sifAdaBox">
+        <div class="w-16 h-16 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">
+            <i class="fa-solid fa-triangle-exclamation"></i>
+        </div>
+        <h3 class="text-xl font-bold text-gray-800 mb-2">Sif Sudah Terisi!</h3>
+        <p id="modalSifAdaMessage" class="text-sm text-gray-600 mb-6 leading-relaxed"></p>
+        <button type="button" onclick="closeSifModal()" id="btnTutupModal" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition focus:outline-none focus:ring-4 focus:ring-blue-300">
+            Paham, Pilih Sif Lain
+        </button>
+    </div>
+</div>
+
+<!-- Modal Pop-up Warning Tanda Tangan Belum Diisi -->
+<div id="modalTTD" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[500] hidden flex items-center justify-center p-4 transition-opacity duration-300 opacity-0">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 text-center shadow-2xl border border-red-100 transform scale-95 transition-transform duration-300" id="ttdBox">
+        <div class="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">
+            <i class="fa-solid fa-signature"></i>
+        </div>
+        <h3 class="text-xl font-bold text-gray-800 mb-2">Tanda Tangan Diperlukan!</h3>
+        <p class="text-base font-semibold text-red-600 mb-6 leading-relaxed">
+            Anda Wajib Tanda Tangan Sebelum menyimpan Logbook!
+        </p>
+        <button type="button" onclick="closeTTDModal()" id="btnTutupTTDModal" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition focus:outline-none focus:ring-4 focus:ring-red-300">
+            <i class="fa-solid fa-pen-nib mr-2"></i> Paham, Isi Tanda Tangan
+        </button>
+    </div>
+</div>
+
+<div class="max-w-5xl mx-auto pt-10 px-4 relative z-10">
+    <div class="text-center mb-10">
+        <div class="inline-block p-3 bg-white/90 backdrop-blur-sm rounded-2xl shadow-md mb-3 border border-blue-50">
+            <img id="bmkgLogo" src="https://www.bmkg.go.id/images/profil/logo-bmkg.png" crossorigin="anonymous" alt="Logo BMKG" class="h-20 w-auto mx-auto object-contain">
+        </div>
+        <h1 class="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-800 to-cyan-600 tracking-tight pb-2 leading-normal">Logbook Forecaster v1.0</h1>
+        <h2 class="text-lg text-gray-700 font-semibold mt-0 tracking-wide">Stasiun Meteorologi Juwata</h2>
+    </div>
+
+    <!-- Form Section -->
+    <div class="glass-card rounded-2xl p-6 md:p-8 mb-10">
+        <h3 class="text-xl font-bold border-b-2 border-blue-100 pb-3 mb-6 text-blue-800">
+            <i class="fa-solid fa-pen-to-square mr-2"></i> Form Pengisian
+        </h3>
+        
+        <form id="logbookForm" class="space-y-6" novalidate>
+            <div class="flex flex-col md:flex-row gap-6">
+                <!-- FITUR MULTI FORECASTER UI HORIZONTAL -->
+                <div class="relative flex-1">
+                    <label class="block text-sm font-semibold mb-1 text-gray-700">Nama Forecaster <span class="text-red-500">*</span></label>
+                    <div class="flex gap-2 items-stretch">
+                        <div class="relative flex-1 group">
+                            <input type="hidden" id="inputNama" value="">
+                            <input type="text" id="inputNamaDisplay" class="w-full h-full border border-gray-300 hover:border-blue-400 rounded-lg py-2.5 px-3 pr-8 focus:ring-2 focus:ring-blue-400 focus:outline-none text-black font-normal text-sm bg-white cursor-pointer truncate shadow-sm transition-all" placeholder="-- Pilih Nama Forecaster --" readonly autocomplete="off">
+                            <i class="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 group-hover:text-blue-500 pointer-events-none text-xs transition-transform duration-300" id="iconNama"></i>
+                            <div id="dropdownNama" class="hidden absolute w-full bg-white border border-gray-100 rounded-xl mt-1.5 shadow-[0_10px_40px_rgba(0,0,0,0.15)] z-[60] max-h-60 overflow-y-auto transform origin-top transition-all duration-200 custom-dropdown-list"></div>
+                        </div>
+                        <div class="flex flex-row gap-1.5 flex-shrink-0">
+                            <!-- TOMBOL KELOLA DAN MULTI -->
+                            <button type="button" onclick="openManageNamesModal()" class="bg-blue-50 border border-blue-200 text-blue-600 hover:bg-blue-100 hover:text-blue-800 w-11 rounded-lg transition shadow-sm z-10 text-sm flex items-center justify-center focus:outline-none" title="Kelola / Tambah Daftar Nama">
+                                <i class="fa-solid fa-users-gear"></i>
+                            </button>
+                            <button type="button" id="btnMultiForecaster" class="bg-gray-50 border border-gray-200 text-gray-400 hover:bg-gray-200 hover:text-gray-700 w-11 rounded-lg transition shadow-sm z-10 text-sm flex items-center justify-center focus:outline-none" title="Aktifkan Dinas Lebih Dari 1 Orang">
+                                <i class="fa-solid fa-user-group"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="w-full md:w-60 relative">
+                    <label class="block text-sm font-semibold mb-1 text-gray-700">Tanggal Dinas <span class="text-red-500">*</span></label>
+                    <div class="relative">
+                        <input type="text" id="inputTanggal" class="w-full border border-gray-300 hover:border-blue-400 rounded-lg py-2.5 px-10 text-center font-semibold focus:ring-2 focus:ring-blue-400 focus:outline-none transition shadow-sm bg-white cursor-pointer text-gray-800" placeholder="Pilih Tanggal..." required autocomplete="off">
+                        <i class="fa-regular fa-calendar-days absolute right-3 top-1/2 -translate-y-1/2 text-blue-500 pointer-events-none text-lg"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Fitur Tukar Dinas -->
+            <div>
+                <div class="flex items-center mb-0 w-max" id="tooltipTukarDinas" title="Aktifkan jika Anda menggantikan dinas orang lain">
+                    <div class="relative inline-block w-11 h-6 align-middle select-none">
+                        <input type="checkbox" id="toggleTukarDinas" class="peer sr-only">
+                        <label for="toggleTukarDinas" class="relative block overflow-hidden h-6 rounded-full bg-gray-200 cursor-pointer peer-focus:ring-2 peer-focus:ring-blue-300 peer-checked:bg-blue-600 transition-colors duration-300 shadow-inner before:absolute before:top-[2px] before:left-[2px] before:bg-white before:border-gray-300 before:border before:rounded-full before:h-5 before:w-5 before:transition-all before:duration-300 peer-checked:before:translate-x-full peer-checked:before:border-white"></label>
+                    </div>
+                    <span class="ml-3 text-sm font-semibold text-gray-600 cursor-default select-none">Tukar Dinas <span class="font-normal text-xs text-gray-400 ml-1">(Opsional)</span></span>
+                </div>
+                <div id="containerNamaTukar" class="hidden flex-col gap-1.5 w-full md:w-1/2 mt-3 animate-fade-in-down">
+                    <label class="block text-xs font-bold text-gray-600 ml-1"><i class="fa-solid fa-arrow-right-arrow-left text-blue-500 mr-1.5"></i>Saya mengisi jadwal dinasnya:</label>
+                    <select id="inputNamaTukar" class="w-full bg-white">
+                        <option value="">-- Pilih Nama Forecaster Terdaftar --</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Pemilihan Sif -->
+            <div id="sifContainer" class="pt-2 border-t border-gray-100">
+                <label class="block text-sm font-semibold mb-2 text-gray-700">Pilih Sif <span class="text-red-500">*</span></label>
+                <div id="sifErrorMessage" class="hidden mb-3 p-2.5 bg-red-100 border border-red-300 text-red-700 text-xs font-bold rounded-xl text-center shadow-sm">
+                    <i class="fa-solid fa-circle-exclamation mr-1.5 text-red-500"></i> Wajib pilih salah satu sif ⬇️
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <label for="sifPagi" class="border-2 border-gray-200 rounded-xl p-4 cursor-pointer flex items-center gap-3 hover:bg-blue-50 hover:border-blue-300 transition-all bg-white/50 select-none">
+                        <input type="radio" id="sifPagi" name="sif" value="Pagi" class="w-5 h-5 text-blue-600 focus:ring-blue-500 cursor-pointer" onchange="toggleSif('Pagi')">
+                        <div>
+                            <div class="font-bold text-gray-800">Pagi</div>
+                            <div class="text-xs text-gray-500 font-normal">07.30 - 14.00 WITA</div>
+                        </div>
+                    </label>
+                    <label for="sifSiang" class="border-2 border-gray-200 rounded-xl p-4 cursor-pointer flex items-center gap-3 hover:bg-blue-50 hover:border-blue-300 transition-all bg-white/50 select-none">
+                        <input type="radio" id="sifSiang" name="sif" value="Siang" class="w-5 h-5 text-blue-600 focus:ring-blue-500 cursor-pointer" onchange="toggleSif('Siang')">
+                        <div>
+                            <div class="font-bold text-gray-800">Siang</div>
+                            <div class="text-xs text-gray-500 font-normal">13.30 - 20.00 WITA</div>
+                        </div>
+                    </label>
+                    <label for="sifMalam" class="border-2 border-gray-200 rounded-xl p-4 cursor-pointer flex items-center gap-3 hover:bg-blue-50 hover:border-blue-300 transition-all bg-white/50 select-none">
+                        <input type="radio" id="sifMalam" name="sif" value="Malam" class="w-5 h-5 text-blue-600 focus:ring-blue-500 cursor-pointer" onchange="toggleSif('Malam')">
+                        <div>
+                            <div class="font-bold text-gray-800">Malam</div>
+                            <div class="text-xs text-gray-500 font-normal">19.30 - 08.00 WITA</div>
+                        </div>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Dynamic Fields Container -->
+            <div id="dynamicFields" class="bg-blue-50/50 rounded-xl p-5 hidden space-y-6 border border-blue-100 shadow-inner">
+                <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm space-y-6">
+                    <label class="block text-sm font-bold text-gray-800 mb-2 border-b pb-2"><i class="fa-solid fa-layer-group mr-2 text-blue-500"></i>Tugas Utama</label>
+                    
+                    <div class="relative">
+                        <label class="block text-sm font-semibold mb-1 text-gray-700">Pembuatan Flight Document <span class="text-xs font-normal text-gray-500">(opsional)</span></label>
+                        <input type="text" id="inputFlight" class="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-400 focus:outline-none text-black font-normal text-sm" placeholder="Ketik Nomor penerbangan..." autocomplete="off">
+                        <div id="dropdownFlight" class="hidden absolute w-full bg-white border border-gray-200 rounded-lg mt-1 shadow-xl custom-dropdown-list z-50"></div>
+                        <div id="selectedFlights" class="flex flex-wrap gap-2 mt-3"></div> 
+                    </div>
+
+                    <!-- Fields Sif Pagi -->
+                    <div id="fieldsPagi" class="hidden space-y-4">
+                        <div>
+                            <label class="block text-sm font-semibold mb-1">Expertize Meteorologi Maritim <span class="text-red-500">*</span></label>
+                            <select id="pgExpertize" class="w-full bg-white">
+                                <option value="">-- Pilih --</option>
+                                <option value="Berhasil">Berhasil</option>
+                                <option value="Tidak Berhasil">Tidak Berhasil</option>
+                            </select>
+                            <input type="text" id="pgExpertizeNote" class="w-full border border-gray-300 rounded-lg p-2.5 mt-2 text-sm text-black font-normal focus:ring-2 focus:ring-blue-400 focus:outline-none" placeholder="Catatan (Opsional)..." autocomplete="off">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold mb-1">PD Gelombang Tinggi Perairan Kaltara <span class="text-red-500">*</span></label>
+                            <select id="pgGelombang" class="w-full bg-white">
+                                <option value="">-- Pilih --</option>
+                                <option value="Sudah dibuat & diseminasikan">Sudah dibuat & diseminasikan</option>
+                                <option value="Tidak ada potensi">Tidak ada potensi</option>
+                                <option value="Catatan">Catatan (Ketik di bawah)</option>
+                            </select>
+                            <input type="text" id="pgGelombangNote" class="w-full border border-gray-300 rounded-lg p-2.5 mt-2 hidden text-sm text-black font-normal focus:ring-2 focus:ring-blue-400 focus:outline-none" placeholder="Catatan PD Gelombang Tinggi..." autocomplete="off">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold mb-1">Mengirim TAF 06:00 UTC <span class="text-red-500">*</span></label>
+                            <select id="pgTAF" class="w-full bg-white">
+                                <option value="">-- Pilih --</option>
+                                <option value="Terkirim">Terkirim</option>
+                                <option value="Belum Terkirim">Belum Terkirim</option>
+                            </select>
+                            <input type="text" id="pgTAFNote" class="w-full border border-gray-300 rounded-lg p-2.5 mt-2 text-sm text-black font-normal focus:ring-2 focus:ring-blue-400 focus:outline-none" placeholder="Catatan TAF 06:00 UTC (Opsional)..." autocomplete="off">
+                        </div>
+                    </div>
+
+                    <!-- Fields Sif Siang -->
+                    <div id="fieldsSiang" class="hidden space-y-4">
+                        <div>
+                            <label class="block text-sm font-semibold mb-1">Briefing NDF Virtual Meeting <span class="text-red-500">*</span></label>
+                            <select id="sgBriefing" class="w-full bg-white">
+                                <option value="">-- Pilih --</option>
+                                <option value="Mengikuti">Mengikuti</option>
+                                <option value="Tidak Mengikuti">Tidak Mengikuti</option>
+                                <option value="Tidak Ada Briefing">Tidak Ada Briefing</option>
+                            </select>
+                            <input type="text" id="sgBriefingNote" class="w-full border border-gray-300 rounded-lg p-2.5 mt-2 text-sm text-black font-normal focus:ring-2 focus:ring-blue-400 focus:outline-none" placeholder="Catatan (Opsional)..." autocomplete="off">
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-semibold mb-1">Expertize Digital Forecast <span class="text-red-500">*</span></label>
+                                <select id="sgExpertize" class="w-full bg-white">
+                                    <option value="">-- Pilih --</option>
+                                    <option value="Berhasil">Berhasil</option>
+                                    <option value="Tidak Berhasil">Tidak Berhasil</option>
+                                    <option value="Tidak Ada">Tidak Ada</option>
+                                </select>
+                                <input type="text" id="sgExpertizeNote" class="w-full border border-gray-300 rounded-lg p-2.5 mt-2 text-sm text-black font-normal focus:ring-2 focus:ring-blue-400 focus:outline-none" placeholder="Catatan (Opsional)..." autocomplete="off">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold mb-1">Harmonisasi Digital Forecast <span class="text-red-500">*</span></label>
+                                <select id="sgHarmonisasi" class="w-full bg-white">
+                                    <option value="">-- Pilih --</option>
+                                    <option value="Belum Mulai">Belum Mulai</option>
+                                    <option value="Selesai">Selesai</option>
+                                    <option value="Masih Berlangsung">Masih Berlangsung</option>
+                                    <option value="Tidak Ada">Tidak Ada</option>
+                                </select>
+                                <input type="text" id="sgHarmonisasiNote" class="w-full border border-gray-300 rounded-lg p-2.5 mt-2 text-sm text-black font-normal focus:ring-2 focus:ring-blue-400 focus:outline-none" placeholder="Catatan (Opsional)..." autocomplete="off">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold mb-1">Mengirim TAF 12:00 UTC <span class="text-red-500">*</span></label>
+                            <select id="sgTAF" class="w-full bg-white">
+                                <option value="">-- Pilih --</option>
+                                <option value="Terkirim">Terkirim</option>
+                                <option value="Belum Terkirim">Belum Terkirim</option>
+                            </select>
+                            <input type="text" id="sgTAFNote" class="w-full border border-gray-300 rounded-lg p-2.5 mt-2 text-sm text-black font-normal focus:ring-2 focus:ring-blue-400 focus:outline-none" placeholder="Catatan TAF 12:00 UTC (Opsional)..." autocomplete="off">
+                        </div>
+                    </div>
+
+                    <!-- Fields Sif Malam -->
+                    <div id="fieldsMalam" class="hidden space-y-4">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-semibold mb-1">Expertize Digital Forecast <span class="text-red-500">*</span></label>
+                                <select id="mlExpertize" class="w-full bg-white">
+                                    <option value="">-- Pilih --</option>
+                                    <option value="Berhasil">Berhasil</option>
+                                    <option value="Tidak Berhasil">Tidak Berhasil</option>
+                                    <option value="Tidak Ada">Tidak Ada</option>
+                                </select>
+                                <input type="text" id="mlExpertizeNote" class="w-full border border-gray-300 rounded-lg p-2.5 mt-2 text-sm text-black font-normal focus:ring-2 focus:ring-blue-400 focus:outline-none" placeholder="Catatan (Opsional)..." autocomplete="off">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold mb-1">Harmonisasi Digital Forecast <span class="text-red-500">*</span></label>
+                                <select id="mlHarmonisasi" class="w-full bg-white">
+                                    <option value="">-- Pilih --</option>
+                                    <option value="Belum Mulai">Belum Mulai</option>
+                                    <option value="Selesai">Selesai</option>
+                                    <option value="Masih Berlangsung">Masih Berlangsung</option>
+                                    <option value="Tidak Ada">Tidak Ada</option>
+                                </select>
+                                <input type="text" id="mlHarmonisasiNote" class="w-full border border-gray-300 rounded-lg p-2.5 mt-2 text-sm text-black font-normal focus:ring-2 focus:ring-blue-400 focus:outline-none" placeholder="Catatan (Opsional)..." autocomplete="off">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold mb-1">Peringatan Dini Cuaca Tiga Harian Kaltara <span class="text-red-500">*</span></label>
+                            <select id="mlCuaca3" class="w-full bg-white">
+                                <option value="">-- Pilih --</option>
+                                <option value="Sudah">Sudah</option>
+                                <option value="Belum">Belum</option>
+                            </select>
+                            <input type="text" id="mlCuaca3Note" class="w-full border border-gray-300 rounded-lg p-2.5 mt-2 text-sm text-black font-normal focus:ring-2 focus:ring-blue-400 focus:outline-none" placeholder="Catatan opsional..." autocomplete="off">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold mb-1">Mengisi Prospek Cuaca <span class="text-red-500">*</span></label>
+                            <select id="mlProspek" class="w-full bg-white">
+                                <option value="">-- Pilih --</option>
+                                <option value="Sudah">Sudah</option>
+                                <option value="Belum">Belum</option>
+                            </select>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-semibold mb-1">TAF 18:00 UTC <span class="text-red-500">*</span></label>
+                                <select id="mlTAF18" class="w-full bg-white">
+                                    <option value="">-- Pilih --</option>
+                                    <option value="Terkirim">Terkirim</option>
+                                    <option value="Belum Terkirim">Belum Terkirim</option>
+                                </select>
+                                <input type="text" id="mlTAF18Note" class="w-full border border-gray-300 rounded-lg p-2.5 mt-2 text-sm text-black font-normal focus:ring-2 focus:ring-blue-400 focus:outline-none" placeholder="Catatan TAF 18:00 UTC (Opsional)..." autocomplete="off">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold mb-1">TAF 00:00 UTC <span class="text-red-500">*</span></label>
+                                <select id="mlTAF00" class="w-full bg-white">
+                                    <option value="">-- Pilih --</option>
+                                    <option value="Terkirim">Terkirim</option>
+                                    <option value="Belum Terkirim">Belum Terkirim</option>
+                                </select>
+                                <input type="text" id="mlTAF00Note" class="w-full border border-gray-300 rounded-lg p-2.5 mt-2 text-sm text-black font-normal focus:ring-2 focus:ring-blue-400 focus:outline-none" placeholder="Catatan TAF 00:00 UTC (Opsional)..." autocomplete="off">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 pt-3 border-t border-gray-100">
+                        <div>
+                            <label class="block text-sm font-semibold mb-1 text-gray-700">Pembuatan Nowcasting</label>
+                            <div class="flex items-center gap-3">
+                                <div class="flex items-center border border-gray-300 rounded-lg overflow-hidden w-28 shadow-sm focus-within:ring-2 focus-within:ring-blue-400 bg-white">
+                                    <button type="button" onclick="ubahAngka('nowcasting', -1)" class="w-8 h-10 bg-gray-50 hover:bg-gray-200 text-gray-600 font-bold transition border-r border-gray-300 focus:outline-none">-</button>
+                                    <input type="number" id="nowcasting" min="0" class="w-full h-10 text-center appearance-none outline-none font-semibold text-gray-700 p-0 m-0" placeholder="0" autocomplete="off">
+                                    <button type="button" onclick="ubahAngka('nowcasting', 1)" class="w-8 h-10 bg-gray-50 hover:bg-gray-200 text-gray-600 font-bold transition border-l border-gray-300 focus:outline-none">+</button>
+                                </div>
+                                <span class="font-medium text-gray-600 text-sm font-normal">Kali update</span>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold mb-1 text-gray-700">AD/WS WARNING <span class="text-red-500">*</span></label>
+                            <div class="flex items-center gap-3">
+                                <select id="adwsStatus" class="w-32 bg-white">
+                                    <option value="Tidak Ada">Tidak Ada</option>
+                                    <option value="AD">AD</option>
+                                    <option value="WS">WS</option>
+                                </select>
+                                <div id="adwsUpdateContainer" class="hidden items-center gap-2">
+                                    <div class="flex items-center border border-gray-300 rounded-lg overflow-hidden w-28 shadow-sm focus-within:ring-2 focus-within:ring-blue-400 bg-white">
+                                        <button type="button" onclick="ubahAngka('adwsUpdate', -1)" class="w-8 h-10 bg-gray-50 hover:bg-gray-200 text-gray-600 font-bold transition border-r border-gray-300 focus:outline-none">-</button>
+                                        <input type="number" id="adwsUpdate" min="0" class="w-full h-10 text-center appearance-none outline-none font-semibold text-gray-700 p-0 m-0" placeholder="0" autocomplete="off">
+                                        <button type="button" onclick="ubahAngka('adwsUpdate', 1)" class="w-8 h-10 bg-gray-50 hover:bg-gray-200 text-gray-600 font-bold transition border-l border-gray-300 focus:outline-none">+</button>
+                                    </div>
+                                    <span class="font-medium text-gray-600 text-sm leading-tight font-normal">Kali<br>update</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- STRUKTUR TUGAS TAMBAHAN -->
+                <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
+                    <label class="block text-sm font-bold text-gray-800 mb-3 border-b pb-2"><i class="fa-solid fa-list-check mr-2 text-blue-500"></i>Tugas Tambahan</label>
+                    <div class="space-y-4 mt-3">
+                        <div class="flex items-start gap-3">
+                            <input type="checkbox" id="ttRespon" class="mt-1 w-4 h-4 text-blue-600 rounded cursor-pointer">
+                            <div class="w-full">
+                                <label for="ttRespon" class="font-normal text-black text-sm cursor-pointer block select-none mb-1">Membuat Respon Cepat Kejadian Cuaca Ekstrem</label>
+                                <input type="text" id="ttResponNote" class="w-full text-sm font-normal text-black border-b border-gray-300 py-1 focus:border-blue-500 focus:outline-none" placeholder="Catatan (Opsional)..." autocomplete="off">
+                            </div>
+                        </div>
+                        <div class="flex items-start gap-3">
+                            <input type="checkbox" id="ttAnalisis" class="mt-1 w-4 h-4 text-blue-600 rounded cursor-pointer">
+                            <div class="w-full">
+                                <label for="ttAnalisis" class="font-normal text-black text-sm cursor-pointer block select-none mb-1">Membuat Analisis Kejadian Cuaca Ekstrem</label>
+                                <input type="text" id="ttAnalisisNote" class="w-full text-sm font-normal text-black border-b border-gray-300 py-1 focus:border-blue-500 focus:outline-none" placeholder="Catatan (Opsional)..." autocomplete="off">
+                            </div>
+                        </div>
+                        <div class="flex items-start gap-3">
+                            <input type="checkbox" id="ttWawancara" class="mt-1 w-4 h-4 text-blue-600 rounded cursor-pointer">
+                            <div class="w-full">
+                                <label for="ttWawancara" class="font-normal text-black text-sm cursor-pointer block select-none mb-1">Wawancara Media</label>
+                                <input type="text" id="ttWawancaraNote" class="w-full text-sm font-normal text-black border-b border-gray-300 py-1 focus:border-blue-500 focus:outline-none" placeholder="Catatan (Opsional)..." autocomplete="off">
+                            </div>
+                        </div>
+                        <div class="flex items-start gap-3">
+                            <input type="checkbox" id="ttROB" class="mt-1 w-4 h-4 text-blue-600 rounded cursor-pointer">
+                            <div class="w-full">
+                                <label for="ttROB" class="font-normal text-black text-sm cursor-pointer block select-none mb-1">Membuat Peringatan Potensi Banjir ROB</label>
+                                <input type="text" id="ttROBNote" class="w-full text-sm font-normal text-black border-b border-gray-300 py-1 focus:border-blue-500 focus:outline-none" placeholder="Catatan (Opsional)..." autocomplete="off">
+                            </div>
+                        </div>
+                        <div class="flex items-start gap-3">
+                            <input type="checkbox" id="ttLainnya" class="mt-1 w-4 h-4 text-blue-600 rounded cursor-pointer">
+                            <div class="w-full">
+                                <label for="ttLainnya" class="font-normal text-black text-sm cursor-pointer block select-none mb-1">Tugas Tambahan Lainnya <span id="labelttLainnyaReq" class="text-red-500 hidden">*</span></label>
+                                <input type="text" id="ttLainnyaNote" class="w-full text-sm font-normal text-black border-b border-gray-300 py-1 focus:border-blue-500 focus:outline-none" placeholder="Sebutkan (Ketik)..." autocomplete="off">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-sm font-semibold mb-1 text-gray-700">Catatan Selama Dinas/Sif</label>
+                <textarea id="catatanDinas" rows="3" class="w-full border border-gray-300 rounded-lg p-3 text-black font-normal text-sm focus:ring-2 focus:ring-blue-400 shadow-sm transition" placeholder="Ketik catatan penting atau kendala (otomatis terisi 'Tidak ada kendala' jika dikosongkan)..." autocomplete="off"></textarea>
+            </div>
+
+            <div class="mt-4 text-center">
+                <label class="block text-sm font-semibold mb-2 text-gray-700 text-center">Tanda Tangan Forecaster On Duty <span class="text-red-500">*</span></label>
+                <div class="signature-wrapper shadow-sm">
+                    <canvas id="signaturePad"></canvas>
+                    <button type="button" onclick="clearSignature()" class="absolute top-2 right-2 bg-red-100 text-red-600 px-2.5 py-1 rounded text-xs font-bold hover:bg-red-200 transition"><i class="fa-solid fa-eraser"></i> Ulangi</button>
+                </div>
+                <p class="text-center text-sm font-bold mt-3 text-gray-800" id="ttdName">Nama Forecaster</p>
+            </div>
+
+            <div class="flex gap-3">
+                <button type="button" id="cancelEditBtn" onclick="cancelEdit()" class="hidden w-1/3 bg-gray-500 hover:bg-gray-600 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg transition"><i class="fa-solid fa-xmark mr-2"></i> Batal Edit</button>
+                <button type="submit" id="submitBtn" class="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg transition">
+                    <i class="fa-solid fa-save mr-2"></i> Simpan ke Database
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Data Table & PDF Section -->
+    <div class="glass-card rounded-2xl p-6 md:p-8 mb-10">
+        <div class="flex flex-col md:flex-row justify-between items-end md:items-center border-b border-gray-200 pb-5 mb-5 gap-4">
+            <div>
+                <h3 class="text-xl font-bold text-blue-800"><i class="fa-solid fa-table-list mr-2"></i> Rekap Logbook Cloud</h3>
+                <p class="text-sm text-gray-500 mt-1">Data historis yang tersinkronisasi online</p>
+            </div>
+            
+            <div class="flex flex-wrap items-center gap-3">
+                <div class="bg-gray-100 p-1.5 rounded-lg border flex items-center gap-2">
+                    <select id="filterMonth" class="bg-white">
+                        <option value="1">Januari</option><option value="2">Februari</option>
+                        <option value="3">Maret</option><option value="4">April</option>
+                        <option value="5">Mei</option><option value="6">Juni</option>
+                        <option value="7">Juli</option><option value="8">Agustus</option>
+                        <option value="9">September</option><option value="10">Oktober</option>
+                        <option value="11">November</option><option value="12">Desember</option>
+                    </select>
+                    <span class="text-gray-300">|</span>
+                    <div class="flex items-center gap-1">
+                        <button type="button" onclick="ubahAngka('filterYear', -1)" class="w-6 h-6 bg-white hover:bg-gray-200 border border-gray-200 rounded text-gray-600 font-bold flex items-center justify-center transition focus:outline-none shadow-sm text-xs">-</button>
+                        <input type="number" id="filterYear" class="bg-transparent border-none outline-none font-normal text-black text-sm w-12 text-center m-0 p-0" step="1" autocomplete="off">
+                        <button type="button" onclick="ubahAngka('filterYear', 1)" class="w-6 h-6 bg-white hover:bg-gray-200 border border-gray-200 rounded text-gray-600 font-bold flex items-center justify-center transition focus:outline-none shadow-sm text-xs">+</button>
+                    </div>
+                </div>
+                
+                <button type="button" id="btnViewPDF" onclick="generatePDF('view')" class="bg-gray-800 hover:bg-black text-white text-sm font-semibold px-4 py-2.5 rounded-lg shadow transition"><i class="fa-solid fa-eye mr-1"></i> View PDF</button>
+                <button type="button" id="btnDownloadPDF" onclick="generatePDF('download')" class="bg-green-600 hover:bg-green-700 text-white text-sm font-semibold px-4 py-2.5 rounded-lg shadow transition"><i class="fa-solid fa-download mr-1"></i> Download</button>
+            </div>
+        </div>
+
+        <div class="overflow-x-auto max-h-[290px] overflow-y-auto bg-white rounded-xl shadow-sm border border-gray-100 table-scroll-container">
+            <table class="min-w-full text-left text-sm">
+                <thead class="uppercase tracking-wider border-b-2 border-gray-300 bg-gray-200 text-gray-900 font-bold sticky top-0 z-10 shadow-sm whitespace-nowrap">
+                    <tr>
+                        <th class="px-5 py-3.5 border-x border-gray-200 text-center w-12 bg-gray-200">No.</th>
+                        <th class="px-5 py-3.5 border-x border-gray-200 text-center bg-gray-200">Nama</th>
+                        <th class="px-5 py-3.5 border-x border-gray-200 text-center bg-gray-200">Tgl. & Sif</th>
+                        <th class="px-5 py-3.5 border-x border-gray-200 text-center bg-gray-200">Catatan Dinas</th>
+                        <th class="px-5 py-3.5 border-x border-gray-200 text-center bg-gray-200">Aksi</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody" class="border-b border-gray-200 divide-y divide-gray-100"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Monitoring Section -->
+    <div class="glass-card rounded-2xl p-6 md:p-8 mb-10">
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-gray-200 pb-4 mb-4 gap-3">
+            <div>
+                <h3 class="text-xl font-bold text-blue-800 flex items-center gap-2">
+                    <i class="fa-solid fa-chart-line text-blue-600"></i> Monitoring Pengisian Logbook Forecaster Juwata
+                </h3>
+                <p id="monitoringSubtitle" class="text-sm text-gray-500 mt-0.5">Mendeteksi sif yang belum terisi</p>
+            </div>
+            <div id="monitoringSummary"></div>
+        </div>
+        <div id="monitoringBody" class="bg-white rounded-xl border border-gray-100 min-h-[100px]"></div>
+    </div>
+
+    <!-- Jadwal Dinas & Dropzone Section -->
+    <div class="glass-card rounded-2xl p-6 md:p-8 mb-10">
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-gray-200 pb-4 mb-6 gap-3">
+            <div>
+                <h3 id="jadwalTitle" class="text-xl font-bold text-blue-800 flex items-center gap-2">
+                    <i class="fa-solid fa-calendar-days text-blue-600"></i> Jadwal Dinas Forecaster
+                </h3>
+                <p class="text-sm text-gray-500 mt-0.5">Membantu pencocokan nama forecaster pada Monitoring Pengisian Logbook</p>
+            </div>
+            
+            <div class="flex flex-wrap items-center gap-2">
+                <button onclick="openAiSettingsModal()" class="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-bold px-4 py-2.5 rounded-lg transition flex items-center gap-1.5 shadow-sm">
+                    <i class="fa-solid fa-key"></i> Set API Key Gemini
+                </button>
+            </div>
+        </div>
+
+        <div id="dropzoneArea" class="dropzone-border rounded-2xl p-6 text-center cursor-pointer mb-8 relative bg-white/60">
+            <input type="file" id="fileJadwalInput" accept=".pdf,image/*" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20">
+            <div class="flex flex-col items-center justify-center space-y-2">
+                <div class="w-12 h-12 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-xl">
+                    <i class="fa-solid fa-robot"></i>
+                </div>
+                <h4 class="font-bold text-gray-800">Drop / Pilih File Jadwal Dinas Baru (Otomatis Menimpa)</h4>
+                <p class="text-xs text-gray-500 max-w-lg leading-relaxed">
+                    Sistem AI mengekstrak personel dengan <b>blok berwarna kuning (sif Forecaster)</b> dari seluruh baris tabel. File media tidak disimpan di cloud.
+                </p>
+            </div>
+            <div id="dropzoneLoading" class="hidden absolute inset-0 bg-white/90 backdrop-blur-sm rounded-2xl flex flex-col items-center justify-center z-30">
+                <i class="fa-solid fa-spinner fa-spin text-3xl text-blue-600 mb-2"></i>
+                <span id="dropzoneLoadingText" class="font-bold text-gray-800 text-sm mt-3 text-center px-4">Menyiapkan Gemini AI...</span>
+            </div>
+        </div>
+
+        <div id="jadwalDisplayContainer"></div>
+    </div>
+    
+    <div class="text-center text-xs text-gray-500 font-medium pb-6">
+        <p class="opacity-80 mb-1">&copy; Tahun&nbsp;<span id="currentYear"></span> Stasiun Meteorologi Juwata Tarakan</p>
+        <div class="mt-2 text-[10px] font-bold text-red-500 bg-red-50 border border-red-100 inline-block px-3 py-1.5 rounded-full shadow-sm select-none">
+            <i class="fa-solid fa-circle-exclamation mr-1"></i> Dilarang menyebarluaskan tautan logbook ini ke pihak di luar Stasiun Meteorologi Juwata!
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- FORMAT NAMA FORECASTER MULTIPLE (PDF & TABEL) ---
+    function formatForecasterNames(namaStr) {
+        if (!namaStr) return '-';
+        const arr = namaStr.split(';').map(s => s.trim()).filter(Boolean);
+        if (arr.length === 1) return arr[0];
+        if (arr.length === 2) return arr[0] + ' dan ' + arr[1];
+        if (arr.length > 2) {
+            const last = arr.pop();
+            return arr.join(', ') + ', dan ' + last;
+        }
+        return namaStr;
+    }
+
+    // --- 1. INISIALISASI CUSTOM DROPDOWN ---
+    function initAllCustomSelects() { document.querySelectorAll('select').forEach(setupCustomSelect); }
+    document.addEventListener('DOMContentLoaded', initAllCustomSelects);
+
+    function setupCustomSelect(select) {
+        if (select.dataset.customized) return;
+        select.dataset.customized = "true";
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'relative custom-select-wrapper user-select-none ' + (select.classList.contains('w-full') ? 'w-full' : '');
+        
+        select.parentNode.insertBefore(wrapper, select);
+        wrapper.appendChild(select);
+        select.classList.add('opacity-0', 'absolute', 'w-0', 'h-0', '-z-10'); 
+
+        const isFilter = select.id === 'filterMonth';
+        
+        const displayBox = document.createElement('div');
+        displayBox.className = isFilter 
+            ? 'bg-transparent border-none outline-none cursor-pointer flex justify-between items-center gap-2 px-1 py-0.5 transition-all group min-w-[110px]'
+            : 'w-full border border-gray-300 rounded-lg p-2.5 bg-white cursor-pointer flex justify-between items-center transition-all shadow-sm hover:border-blue-400 group';
+        
+        const displayText = document.createElement('span');
+        displayText.className = 'text-black font-normal text-sm truncate';
+        
+        const icon = document.createElement('i');
+        icon.className = 'fa-solid fa-chevron-down text-gray-400 text-xs transition-transform duration-300 group-hover:text-blue-500 flex-shrink-0';
+        
+        displayBox.appendChild(displayText);
+        displayBox.appendChild(icon);
+        wrapper.appendChild(displayBox);
+
+        const menu = document.createElement('div');
+        const menuWidthClass = isFilter ? 'min-w-[140px] w-max left-0' : 'w-full left-0';
+        menu.className = 'absolute ' + menuWidthClass + ' bg-white border border-gray-100 rounded-xl shadow-[0_10px_40px_rgba(0,0,0,0.15)] mt-1.5 hidden max-h-60 overflow-y-auto overflow-x-hidden top-full opacity-100 transform origin-top transition-all duration-200 scale-95 opacity-0 z-[100]';
+        wrapper.appendChild(menu);
+
+        const updateUI = () => {
+            const opt = select.options[select.selectedIndex];
+            if(opt && opt.value !== "") {
+                displayText.innerText = opt.text;
+                displayText.className = 'text-black font-normal text-sm truncate';
+            } else {
+                displayText.innerText = opt ? opt.text : "Pilih...";
+                displayText.className = 'text-gray-500 font-normal text-sm truncate';
+            }
+        };
+
+        const renderOptions = () => {
+            menu.innerHTML = '';
+            Array.from(select.options).forEach((opt, idx) => {
+                if(isFilter && opt.value === "") return;
+
+                const item = document.createElement('div');
+                item.className = 'px-4 py-3 cursor-pointer text-black text-sm font-normal border-b border-gray-50 last:border-none transition-colors duration-200 flex items-center justify-between gap-3 whitespace-nowrap';
+                
+                if (select.selectedIndex === idx && opt.value !== "") {
+                    item.classList.add('bg-blue-50');
+                    item.innerHTML = '<span class="text-black truncate">' + escapeHTML(opt.text) + '</span> <i class="fa-solid fa-check text-blue-500 text-xs flex-shrink-0"></i>';
+                } else {
+                    item.classList.add('hover:bg-gray-100');
+                    item.innerHTML = '<span class="truncate">' + escapeHTML(opt.text) + '</span>';
+                }
+
+                item.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    select.selectedIndex = idx;
+                    select.dispatchEvent(new Event('change'));
+                    updateUI();
+                    closeMenu();
+                });
+                menu.appendChild(item);
+            });
+            updateUI();
+        };
+
+        const openMenu = () => {
+            closeAllCustomSelects();
+            if (wrapper.closeTimeout) clearTimeout(wrapper.closeTimeout);
+            wrapper.style.zIndex = '60';
+            menu.classList.remove('hidden');
+            void menu.offsetWidth;
+            menu.classList.remove('scale-95', 'opacity-0');
+            menu.classList.add('scale-100', 'opacity-100');
+            if(!isFilter) displayBox.classList.add('ring-2', 'ring-blue-400', 'border-blue-400');
+            icon.classList.add('rotate-180', 'text-blue-600');
+        };
+
+        const closeMenu = () => {
+            menu.classList.remove('scale-100', 'opacity-100');
+            menu.classList.add('scale-95', 'opacity-0');
+            if(!isFilter) displayBox.classList.remove('ring-2', 'ring-blue-400', 'border-blue-400');
+            icon.classList.remove('rotate-180', 'text-blue-600');
+            if (wrapper.closeTimeout) clearTimeout(wrapper.closeTimeout);
+            wrapper.closeTimeout = setTimeout(() => { 
+                menu.classList.add('hidden'); 
+                wrapper.style.zIndex = ''; 
+            }, 200);
+        };
+
+        displayBox.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (menu.classList.contains('hidden')) openMenu(); else closeMenu();
+        });
+
+        select.addEventListener('change', () => { updateUI(); renderOptions(); });
+        select.addEventListener('sync-custom-select', () => { updateUI(); renderOptions(); });
+        
+        const observer = new MutationObserver(() => { renderOptions(); });
+        observer.observe(select, { childList: true });
+
+        renderOptions();
+    }
+
+    function closeAllCustomSelects() {
+        document.querySelectorAll('.custom-select-wrapper').forEach(wrapper => {
+            const menu = wrapper.children[2];
+            const displayBox = wrapper.children[1];
+            const icon = displayBox ? displayBox.querySelector('i') : null;
+            if (menu && !menu.classList.contains('hidden')) {
+                menu.classList.remove('scale-100', 'opacity-100');
+                menu.classList.add('scale-95', 'opacity-0');
+                if (displayBox) displayBox.classList.remove('ring-2', 'ring-blue-400', 'border-blue-400');
+                if (icon) icon.classList.remove('rotate-180', 'text-blue-600');
+                if (wrapper.closeTimeout) clearTimeout(wrapper.closeTimeout);
+                wrapper.closeTimeout = setTimeout(() => { 
+                    menu.classList.add('hidden'); 
+                    wrapper.style.zIndex = ''; 
+                }, 200);
+            }
+        });
+    }
+    document.addEventListener('click', closeAllCustomSelects);
+
+
+    // --- FUNGSI CUSTOM MODAL ---
+    function showCustomModal(overlayId, boxId) {
+        const overlay = document.getElementById(overlayId);
+        const box = document.getElementById(boxId);
+        overlay.classList.remove('hidden');
+        void overlay.offsetWidth; 
+        overlay.classList.remove('opacity-0');
+        overlay.classList.add('opacity-100');
+        box.classList.remove('scale-95');
+        box.classList.add('scale-100');
+    }
+
+    function hideCustomModal(overlayId, boxId) {
+        const overlay = document.getElementById(overlayId);
+        const box = document.getElementById(boxId);
+        overlay.classList.remove('opacity-100');
+        overlay.classList.add('opacity-0');
+        box.classList.remove('scale-100');
+        box.classList.add('scale-95');
+        setTimeout(() => overlay.classList.add('hidden'), 300);
+    }
+
+    function customAlert(message, title = "Informasi", type = "info") {
+        return new Promise((resolve) => {
+            document.getElementById('alertTitle').innerText = title;
+            document.getElementById('alertMessage').innerHTML = message;
+
+            const iconContainer = document.getElementById('alertIcon');
+            if(type === 'success') iconContainer.innerHTML = '<div class="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl"><i class="fa-solid fa-circle-check"></i></div>';
+            else if (type === 'error') iconContainer.innerHTML = '<div class="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl"><i class="fa-solid fa-circle-xmark"></i></div>';
+            else if (type === 'warning') iconContainer.innerHTML = '<div class="w-16 h-16 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl"><i class="fa-solid fa-triangle-exclamation"></i></div>';
+            else iconContainer.innerHTML = '<div class="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl"><i class="fa-solid fa-circle-info"></i></div>';
+
+            const btnOK = document.getElementById('btnAlertOK');
+            
+            const cleanup = () => {
+                hideCustomModal('modalAlert', 'alertBox');
+                btnOK.removeEventListener('click', onClick);
+                resolve();
+            };
+            const onClick = () => cleanup();
+            
+            btnOK.addEventListener('click', onClick);
+            showCustomModal('modalAlert', 'alertBox');
+            setTimeout(() => btnOK.focus(), 100);
+        });
+    }
+
+    function customConfirm(message, title = "Konfirmasi") {
+        return new Promise((resolve) => {
+            document.getElementById('confirmTitle').innerText = title;
+            document.getElementById('confirmMessage').innerHTML = message;
+            
+            const btnYes = document.getElementById('btnConfirmYes');
+            const btnNo = document.getElementById('btnConfirmNo');
+
+            const cleanup = (result) => {
+                hideCustomModal('modalConfirm', 'confirmBox');
+                btnYes.removeEventListener('click', onYes);
+                btnNo.removeEventListener('click', onNo);
+                resolve(result);
+            };
+
+            const onYes = () => cleanup(true);
+            const onNo = () => cleanup(false);
+
+            btnYes.addEventListener('click', onYes);
+            btnNo.addEventListener('click', onNo);
+
+            showCustomModal('modalConfirm', 'confirmBox');
+            setTimeout(() => btnNo.focus(), 100); 
+        });
+    }
+
+    function customPrompt(message, defaultValue = "", title = "Input Data") {
+        return new Promise((resolve) => {
+            document.getElementById('promptTitle').innerText = title;
+            document.getElementById('promptMessage').innerHTML = message;
+            const inputField = document.getElementById('promptInput');
+            inputField.value = defaultValue;
+            
+            const btnSimpan = document.getElementById('btnPromptSimpan');
+            const btnBatal = document.getElementById('btnPromptBatal');
+
+            const cleanup = (result) => {
+                hideCustomModal('modalPrompt', 'promptBox');
+                btnSimpan.removeEventListener('click', onSimpan);
+                btnBatal.removeEventListener('click', onBatal);
+                resolve(result);
+            };
+
+            const onSimpan = () => cleanup(inputField.value);
+            const onBatal = () => cleanup(null);
+
+            btnSimpan.addEventListener('click', onSimpan);
+            btnBatal.addEventListener('click', onBatal);
+
+            showCustomModal('modalPrompt', 'promptBox');
+            setTimeout(() => inputField.focus(), 100); 
+        });
+    }
+
+    document.getElementById('promptInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); document.getElementById('btnPromptSimpan').click(); }
+    });
+
+    window.addEventListener('dragover', (e) => e.preventDefault(), false);
+    window.addEventListener('drop', (e) => e.preventDefault(), false);
+
+    function escapeHTML(str) {
+        if (!str) return '';
+        return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    function getWitaDate() {
+        const witaStr = new Date().toLocaleString("en-US", { timeZone: "Asia/Makassar" });
+        return new Date(witaStr);
+    }
+
+    function getEffectiveDefaultDate() {
+        const witaTime = getWitaDate();
+        if (witaTime.getHours() < 9) {
+            witaTime.setDate(witaTime.getDate() - 1);
+        }
+        return witaTime;
+    }
+
+    function ubahAngka(id, step) {
+        const inputEl = document.getElementById(id);
+        if (!inputEl) return;
+        
+        let currentVal = parseInt(inputEl.value);
+        if (isNaN(currentVal)) {
+            currentVal = (id === 'filterYear') ? getWitaDate().getFullYear() : 0;
+        }
+
+        let newVal = currentVal + step;
+        
+        if (id !== 'filterYear' && newVal < 0) newVal = 0; 
+        if (id === 'filterYear' && newVal < 2000) newVal = 2000; 
+        
+        inputEl.value = newVal;
+        inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+
+    function formatDate(dateString) {
+        if(!dateString) return '-';
+        const parts = dateString.split('-');
+        if(parts.length === 3) {
+            return `${parts[2]}/${parts[1]}/${parts[0]}`;
+        }
+        return dateString;
+    }
+
+    document.getElementById('currentYear').innerText = getWitaDate().getFullYear();
+
+    const monthNames = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+    const sifWeight = { 'Pagi': 1, 'Siang': 2, 'Malam': 3 };
+
+    // --- 1. INISIALISASI FIREBASE ---
+    const firebaseConfig = {
+      apiKey: "AIzaSyC3rhtpcGeqqO5LERxSaoM8a6kR6GGvgwk",
+      authDomain: "logbook-forecasterjuwata.firebaseapp.com",
+      projectId: "logbook-forecasterjuwata",
+      storageBucket: "logbook-forecasterjuwata.firebasestorage.app",
+      messagingSenderId: "343325615729",
+      appId: "1:343325615729:web:8a0a23b7be248300761dd0"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    firebase.firestore().enablePersistence().catch((err) => console.warn("Firebase persistence warning:", err.code));
+    const db = firebase.firestore();
+
+    let savedNames = [];
+    let savedFlights = [];
+    let sharedApiKey = "";
+    let isEditingSchedule = false;
+    let existingSignatureData = null;
+    let isProcessingSchedule = false;
+    let currentLogs = [];
+    let currentScheduleData = null;
+    let editingLogId = null;
+    let selectedFlightArray = [];
+    let scheduleUnsubscribe = null;
+
+    // --- LOGIKA MULTI FORECASTER (NAMA) ---
+    let isMultiForecaster = false;
+    let selectedForecasters = [];
+
+    const btnMulti = document.getElementById('btnMultiForecaster');
+    const displayNama = document.getElementById('inputNamaDisplay');
+    const hiddenNama = document.getElementById('inputNama');
+    const dropdownNama = document.getElementById('dropdownNama');
+    const iconNama = document.getElementById('iconNama');
+
+    btnMulti.addEventListener('click', (e) => {
+        e.preventDefault();
+        isMultiForecaster = !isMultiForecaster;
+        if (isMultiForecaster) {
+            btnMulti.className = "border w-11 rounded-lg transition shadow-sm z-10 text-sm flex items-center justify-center focus:outline-none bg-blue-100 border-blue-300 text-blue-700";
+            btnMulti.title = "Nonaktifkan Dinas Lebih Dari 1 Orang";
+        } else {
+            btnMulti.className = "bg-gray-50 border border-gray-200 text-gray-400 hover:bg-gray-200 hover:text-gray-700 w-11 rounded-lg transition shadow-sm z-10 text-sm flex items-center justify-center focus:outline-none";
+            btnMulti.title = "Aktifkan Dinas Lebih Dari 1 Orang";
+            if (selectedForecasters.length > 1) {
+                selectedForecasters = [selectedForecasters[0]];
+                updateNamaDisplay();
+            }
+        }
+        btnMulti.blur(); 
+        renderDropdownNama();
+    });
+
+    function updateNamaDisplay() {
+        const val = selectedForecasters.join('; ');
+        hiddenNama.value = val;
+        displayNama.value = val;
+        document.getElementById('ttdName').innerText = val || 'Nama Forecaster';
+
+        if(val) displayNama.classList.replace('text-gray-500', 'text-black');
+        else displayNama.classList.replace('text-black', 'text-gray-500');
+
+        if(toggleTukarDinas.checked) populateTukarDinasSelect();
+    }
+
+    displayNama.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (dropdownNama.classList.contains('hidden')) {
+            closeAllCustomSelects(); 
+            renderDropdownNama();
+            dropdownNama.classList.remove('hidden');
+            iconNama.classList.add('rotate-180', 'text-blue-600');
+            displayNama.classList.add('ring-2', 'ring-blue-400', 'border-blue-400');
+        } else {
+            dropdownNama.classList.add('hidden');
+            iconNama.classList.remove('rotate-180', 'text-blue-600');
+            displayNama.classList.remove('ring-2', 'ring-blue-400', 'border-blue-400');
+        }
+    });
+
+    displayNama.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            dropdownNama.classList.add('hidden');
+            iconNama.classList.remove('rotate-180', 'text-blue-600');
+            displayNama.classList.remove('ring-2', 'ring-blue-400', 'border-blue-400');
+        }
+    });
+
+    document.addEventListener('click', (e) => {
+        if (!displayNama.contains(e.target) && !dropdownNama.contains(e.target)) {
+            dropdownNama.classList.add('hidden');
+            iconNama.classList.remove('rotate-180', 'text-blue-600');
+            displayNama.classList.remove('ring-2', 'ring-blue-400', 'border-blue-400');
+        }
+    });
+
+    function renderDropdownNama() {
+        dropdownNama.innerHTML = '';
+        
+        let options = [...savedNames];
+        if (editingLogId) {
+            selectedForecasters.forEach(name => {
+                if (!options.includes(name)) options.push(name);
+            });
+        }
+
+        if (options.length === 0) {
+            dropdownNama.innerHTML = '<div class="px-4 py-3 text-gray-400 text-sm italic text-center">Belum ada daftar nama.</div>';
+            return;
+        }
+
+        options.forEach(name => {
+            const isSelected = selectedForecasters.includes(name);
+            const item = document.createElement('div');
+            item.className = 'px-4 py-3 cursor-pointer text-sm border-b border-gray-50 flex items-center justify-between transition-colors ';
+            
+            let label = escapeHTML(name);
+            if(editingLogId && !savedNames.includes(name)) label += ' <span class="text-[10px] text-amber-500 font-bold bg-amber-50 px-2 py-0.5 rounded border border-amber-200 ml-2">Historis</span>';
+
+            if (isSelected) {
+                item.className += 'bg-blue-50 text-blue-700 font-bold';
+                item.innerHTML = `<span>${label}</span> <i class="fa-solid fa-check text-blue-500"></i>`;
+            } else {
+                item.className += 'bg-white text-black font-normal hover:bg-gray-100';
+                item.innerHTML = `<span>${label}</span>`;
+            }
+
+            item.onclick = (e) => {
+                e.stopPropagation();
+                if (isMultiForecaster) {
+                    if (isSelected) selectedForecasters = selectedForecasters.filter(n => n !== name);
+                    else selectedForecasters.push(name);
+                    updateNamaDisplay();
+                    renderDropdownNama(); 
+                } else {
+                    if (!isSelected) {
+                        selectedForecasters = [name];
+                        updateNamaDisplay();
+                    }
+                    dropdownNama.classList.add('hidden');
+                    iconNama.classList.remove('rotate-180', 'text-blue-600');
+                    displayNama.classList.remove('ring-2', 'ring-blue-400', 'border-blue-400');
+                }
+            };
+            dropdownNama.appendChild(item);
+        });
+    }
+
+    // --- LOGIKA TUKAR DINAS ---
+    const toggleTukarDinas = document.getElementById('toggleTukarDinas');
+    const containerNamaTukar = document.getElementById('containerNamaTukar');
+    const inputNamaTukar = document.getElementById('inputNamaTukar');
+
+    toggleTukarDinas.addEventListener('change', function() {
+        const tooltipEl = document.getElementById('tooltipTukarDinas');
+        if (this.checked) {
+            if(tooltipEl) tooltipEl.title = "Nonaktifkan fitur Tukar Dinas";
+            containerNamaTukar.classList.remove('hidden');
+            containerNamaTukar.classList.add('flex');
+            populateTukarDinasSelect();
+        } else {
+            if(tooltipEl) tooltipEl.title = "Aktifkan jika Anda menggantikan dinas orang lain";
+            containerNamaTukar.classList.add('hidden');
+            containerNamaTukar.classList.remove('flex');
+            inputNamaTukar.value = '';
+            inputNamaTukar.dispatchEvent(new Event('sync-custom-select'));
+        }
+    });
+
+    function populateTukarDinasSelect() {
+        const currentTukarVal = inputNamaTukar.value;
+        inputNamaTukar.innerHTML = '<option value="">-- Pilih Nama Forecaster Terdaftar --</option>';
+        
+        if (currentTukarVal && !selectedForecasters.includes(currentTukarVal) && !savedNames.includes(currentTukarVal)) {
+            const opt = document.createElement('option');
+            opt.value = currentTukarVal;
+            opt.textContent = currentTukarVal + ' (Data Historis)';
+            inputNamaTukar.appendChild(opt);
+        }
+
+        savedNames.forEach(name => {
+            if (!selectedForecasters.includes(name)) {
+                const opt = document.createElement('option');
+                opt.value = name;
+                opt.textContent = name;
+                inputNamaTukar.appendChild(opt);
+            }
+        });
+        
+        if (currentTukarVal && !selectedForecasters.includes(currentTukarVal)) {
+            inputNamaTukar.value = currentTukarVal;
+        }
+    }
+
+    function updateFlightPlaceholder() {
+        const inputFlight = document.getElementById('inputFlight');
+        if (inputFlight) {
+            if (savedFlights.length > 0) {
+                inputFlight.placeholder = "Pilih atau ketik Nomor penerbangan...";
+            } else {
+                inputFlight.placeholder = "Ketik Nomor penerbangan...";
+            }
+        }
+    }
+
+    db.collection("preset_options").doc("master").onSnapshot((doc) => {
+        if (doc.exists) {
+            const data = doc.data();
+            savedNames = Array.isArray(data.names) ? data.names : [];
+            savedFlights = Array.isArray(data.flights) ? data.flights : [];
+        } else {
+            savedNames = [];
+            savedFlights = [];
+        }
+        
+        renderDropdownNama();
+        if(toggleTukarDinas.checked) populateTukarDinasSelect();
+        if (!document.getElementById('modalManageNames').classList.contains('hidden')) renderManageNamesList();
+        updateFlightPlaceholder();
+    });
+
+    db.collection("settings").doc("gemini").onSnapshot((doc) => {
+        if (doc.exists) {
+            sharedApiKey = doc.data().key || "";
+        }
+    });
+
+    async function savePresetOption(fieldName, item) {
+        if (!item) return;
+        const cleanItem = item.trim();
+        if (!cleanItem) return;
+
+        if (fieldName === 'names' && !savedNames.includes(cleanItem)) {
+            savedNames.push(cleanItem);
+            renderDropdownNama();
+            if(toggleTukarDinas.checked) populateTukarDinasSelect();
+            if (!document.getElementById('modalManageNames').classList.contains('hidden')) renderManageNamesList();
+        } else if (fieldName === 'flights' && !savedFlights.includes(cleanItem)) {
+            savedFlights.push(cleanItem);
+        }
+
+        const updateObj = {};
+        updateObj[fieldName] = firebase.firestore.FieldValue.arrayUnion(cleanItem);
+        db.collection("preset_options").doc("master").set(updateObj, { merge: true })
+        .catch(async err => await customAlert("Gagal menyimpan ke server: " + err.message, "Error", "error"));
+    }
+
+    async function deletePresetOption(fieldName, item) {
+        if (!item) return;
+        if (fieldName === 'names') {
+            savedNames = savedNames.filter(i => i !== item);
+            renderDropdownNama();
+            if(toggleTukarDinas.checked) populateTukarDinasSelect();
+            if (!document.getElementById('modalManageNames').classList.contains('hidden')) renderManageNamesList();
+        } else if (fieldName === 'flights') {
+            savedFlights = savedFlights.filter(i => i !== item);
+        }
+
+        const updateObj = {};
+        updateObj[fieldName] = firebase.firestore.FieldValue.arrayRemove(item);
+        db.collection("preset_options").doc("master").set(updateObj, { merge: true })
+        .catch(async err => await customAlert("Gagal menghapus dari server: " + err.message, "Error", "error"));
+    }
+
+    function openManageNamesModal() { 
+        document.getElementById('dropdownNama').classList.add('hidden'); 
+        document.getElementById('modalManageNames').classList.remove('hidden'); 
+        renderManageNamesList(); 
+    }
+    function closeManageNamesModal() { document.getElementById('modalManageNames').classList.add('hidden'); }
+    
+    function renderManageNamesList() {
+        const listContainer = document.getElementById('manageNamesList');
+        listContainer.innerHTML = '';
+        if(savedNames.length === 0) {
+            listContainer.innerHTML = '<li class="p-3 text-center text-gray-400 text-sm font-medium">Daftar masih kosong</li>';
+            return;
+        }
+        savedNames.forEach(name => {
+            const li = document.createElement('li');
+            li.className = 'flex justify-between items-center bg-white p-2.5 rounded-lg border border-gray-200 mb-1.5 shadow-sm';
+            
+            const span = document.createElement('span');
+            span.className = 'font-semibold text-gray-700 text-sm truncate';
+            span.textContent = name;
+            
+            const btnGroup = document.createElement('div');
+            btnGroup.className = 'flex gap-2.5 ml-2';
+            
+            const btnEdit = document.createElement('button');
+            btnEdit.type = 'button';
+            btnEdit.className = 'text-blue-500 hover:text-blue-700 transition';
+            btnEdit.title = 'Edit';
+            btnEdit.innerHTML = '<i class="fa-solid fa-pen-to-square"></i>';
+            btnEdit.onclick = () => editPresetName(name);
+            
+            const btnDel = document.createElement('button');
+            btnDel.type = 'button';
+            btnDel.className = 'text-red-500 hover:text-red-700 transition';
+            btnDel.title = 'Hapus';
+            btnDel.innerHTML = '<i class="fa-solid fa-trash"></i>';
+            btnDel.onclick = () => deletePresetName(name);
+            
+            btnGroup.appendChild(btnEdit);
+            btnGroup.appendChild(btnDel);
+            li.appendChild(span);
+            li.appendChild(btnGroup);
+            listContainer.appendChild(li);
+        });
+    }
+
+    async function addPresetName() {
+        const input = document.getElementById('newForecasterName');
+        const val = input.value.trim();
+        if(val && !savedNames.includes(val)) {
+            savePresetOption('names', val);
+            input.value = '';
+        } else if (savedNames.includes(val)) {
+            await customAlert('Nama sudah ada di daftar!', 'Peringatan', 'warning');
+        }
+    }
+    document.getElementById('newForecasterName').addEventListener('keydown', async (e) => {
+        if(e.key === 'Enter') { e.preventDefault(); await addPresetName(); }
+    });
+    
+    async function editPresetName(oldName) {
+        const newName = await customPrompt("Edit Nama Forecaster:", oldName, "Edit Nama");
+        if (newName === null) return;
+        const trimmed = newName.trim();
+        if (trimmed === "" || trimmed === oldName) return;
+        if (savedNames.includes(trimmed)) {
+            await customAlert("Nama forecaster tersebut sudah ada di daftar!", "Peringatan", "warning");
+            return;
+        }
+        const updatedNames = savedNames.map(n => n === oldName ? trimmed : n);
+        savedNames = updatedNames;
+        renderDropdownNama();
+        if(toggleTukarDinas.checked) populateTukarDinasSelect();
+        renderManageNamesList();
+        db.collection("preset_options").doc("master").set({ names: updatedNames }, { merge: true })
+        .catch(async err => await customAlert("Gagal memperbarui di server: " + err.message, "Error", "error"));
+    }
+    
+    async function deletePresetName(name) {
+        const confirmed = await customConfirm('Hapus "<b>' + name + '</b>" dari daftar secara permanen?', "Konfirmasi Hapus");
+        if(confirmed) deletePresetOption('names', name);
+    }
+
+    const fpTanggal = flatpickr("#inputTanggal", {
+        altInput: true, 
+        altFormat: "j F Y", 
+        dateFormat: "Y-m-d", 
+        defaultDate: getEffectiveDefaultDate(), 
+        now: getWitaDate(), 
+        locale: "id",
+        disableMobile: true,
+        onChange: function() {
+            const checkedSif = document.querySelector('input[name="sif"]:checked');
+            if(checkedSif) toggleSif(checkedSif.value);
+        }
+    });
+
+    const canvas = document.getElementById('signaturePad');
+    const signaturePad = new SignaturePad(canvas, { backgroundColor: 'rgba(255, 255, 255, 0)' });
+    let canvasWidth = window.innerWidth;
+
+    canvas.addEventListener('touchstart', function(e) { e.preventDefault(); }, { passive: false });
+    canvas.addEventListener('touchmove', function(e) { e.preventDefault(); }, { passive: false });
+
+    function resizeCanvas() {
+        const ratio = Math.max(window.devicePixelRatio || 1, 1);
+        const data = signaturePad && !signaturePad.isEmpty() ? signaturePad.toDataURL() : existingSignatureData;
+        canvas.width = canvas.offsetWidth * ratio;
+        canvas.height = canvas.offsetHeight * ratio;
+        canvas.getContext("2d").scale(ratio, ratio);
+        signaturePad.clear();
+        if (data) signaturePad.fromDataURL(data);
+    }
+    window.addEventListener('resize', () => {
+        if(window.innerWidth !== canvasWidth) { canvasWidth = window.innerWidth; resizeCanvas(); }
+    });
+    setTimeout(resizeCanvas, 100);
+
+    function clearSignature() { 
+        signaturePad.clear(); 
+        existingSignatureData = null; 
+    }
+
+    function showSifExistModal(sif, tglFormatted) {
+        document.getElementById('modalSifAdaMessage').innerHTML = 'Sif <b>' + sif + '</b> pada tanggal <b>' + tglFormatted + '</b> sudah terisi.<br><br>Silakan pilih sif yang lain, atau gunakan fitur <b>Edit</b> pada tabel Rekap Logbook Cloud jika ingin mengubah data.';
+        showCustomModal('modalSifAda', 'sifAdaBox');
+        setTimeout(() => document.getElementById('btnTutupModal').focus(), 100);
+    }
+    function closeSifModal() { hideCustomModal('modalSifAda', 'sifAdaBox'); }
+    
+    function showTTDModal() {
+        showCustomModal('modalTTD', 'ttdBox');
+        setTimeout(() => document.getElementById('btnTutupTTDModal').focus(), 100);
+    }
+    function closeTTDModal() { 
+        hideCustomModal('modalTTD', 'ttdBox');
+        const sigWrapper = document.querySelector('.signature-wrapper');
+        if (sigWrapper) sigWrapper.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+            if (!document.getElementById('modalSifAda').classList.contains('hidden')) { event.preventDefault(); closeSifModal(); return; }
+            if (!document.getElementById('modalTTD').classList.contains('hidden')) { event.preventDefault(); closeTTDModal(); return; }
+        }
+    });
+
+    const initWita = getWitaDate();
+    document.getElementById('filterMonth').value = initWita.getMonth() + 1;
+    document.getElementById('filterYear').value = initWita.getFullYear();
+
+    document.getElementById('filterMonth').addEventListener('change', () => { 
+        isEditingSchedule = false; 
+        currentScheduleData = null; 
+        renderTable(); 
+        renderMonitoring(); 
+        fetchSchedule(); 
+    });
+    document.getElementById('filterYear').addEventListener('input', () => { 
+        isEditingSchedule = false; 
+        currentScheduleData = null; 
+        renderTable(); 
+        renderMonitoring(); 
+        fetchSchedule(); 
+    });
+
+    // Menangani sinkronisasi reset form ke custom UI
+    document.getElementById('logbookForm').addEventListener('reset', () => {
+        setTimeout(() => {
+            document.querySelectorAll('select').forEach(s => s.dispatchEvent(new Event('sync-custom-select')));
+        }, 50);
+    });
+
+    document.getElementById('ttLainnya').addEventListener('change', (e) => {
+        const note = document.getElementById('ttLainnyaNote');
+        const reqStar = document.getElementById('labelttLainnyaReq');
+        if(e.target.checked) reqStar.classList.remove('hidden');
+        else { reqStar.classList.add('hidden'); note.value = ''; }
+    });
+
+    ['ttRespon', 'ttAnalisis', 'ttWawancara', 'ttROB'].forEach(id => {
+        const noteInput = document.getElementById(id + 'Note');
+        const cb = document.getElementById(id);
+        if (noteInput && cb) {
+            noteInput.addEventListener('input', (e) => { if (e.target.value.trim() !== '') cb.checked = true; });
+            cb.addEventListener('change', (e) => { if (!e.target.checked) noteInput.value = ''; });
+        }
+    });
+
+    document.getElementById('ttLainnyaNote').addEventListener('input', (e) => {
+        const cb = document.getElementById('ttLainnya');
+        const reqStar = document.getElementById('labelttLainnyaReq');
+        if(e.target.value.trim() !== '') {
+            cb.checked = true; reqStar.classList.remove('hidden');
+        } else {
+            cb.checked = false; reqStar.classList.add('hidden');
+        }
+    });
+
+    // --- FITUR DROPDOWN FLIGHT DOCUMENT ---
+    function setupFlightDropdown() {
+        const input = document.getElementById('inputFlight');
+        const dropdown = document.getElementById('dropdownFlight');
+        let justFocusedFlight = false;
+        
+        input.addEventListener('focus', () => {
+            justFocusedFlight = true;
+            renderList();
+            setTimeout(() => { justFocusedFlight = false; }, 250);
+        });
+        
+        input.addEventListener('click', (e) => {
+            if (justFocusedFlight) return;
+            if (!dropdown.classList.contains('hidden') && input.value === '') dropdown.classList.add('hidden');
+            else renderList();
+        });
+
+        input.addEventListener('input', () => renderList());
+
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const val = input.value.trim();
+                if (val && !selectedFlightArray.includes(val)) {
+                    savePresetOption('flights', val); 
+                    addFlightChip(val); 
+                }
+                input.value = ''; 
+                dropdown.classList.add('hidden');
+            }
+        });
+        
+        document.addEventListener('click', (e) => { 
+            if(!input.contains(e.target) && !dropdown.contains(e.target)) dropdown.classList.add('hidden'); 
+        });
+
+        function renderList() {
+            dropdown.innerHTML = '';
+            const val = input.value.trim().toLowerCase();
+            
+            let filtered = savedFlights.filter(item => item.toLowerCase().includes(val) && !selectedFlightArray.includes(item));
+            if(filtered.length === 0 && val === '' && savedFlights.length === 0 && selectedFlightArray.length === 0) { 
+                dropdown.classList.add('hidden'); return; 
+            }
+            dropdown.classList.remove('hidden');
+
+            filtered.forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'flex justify-between items-center px-4 py-2 hover:bg-blue-50 cursor-pointer border-b text-sm transition text-black font-normal';
+                
+                const spanText = document.createElement('span'); 
+                spanText.innerText = item; 
+                spanText.className = 'flex-1';
+                spanText.onclick = (e) => { 
+                    e.stopPropagation(); addFlightChip(item); input.value = ''; renderList(); input.focus();
+                };
+                
+                const spanDel = document.createElement('span'); 
+                spanDel.innerHTML = '<i class="fa-solid fa-times text-gray-400 hover:text-red-500 px-2 py-1 transition" title="Hapus Permanen"></i>';
+                spanDel.onclick = (e) => { e.stopPropagation(); deletePresetOption('flights', item); renderList(); };
+                
+                div.appendChild(spanText); div.appendChild(spanDel); dropdown.appendChild(div);
+            });
+
+            if(val && !savedFlights.some(i => i.toLowerCase() === val) && !selectedFlightArray.some(i => i.toLowerCase() === val)) {
+                const divNew = document.createElement('div');
+                divNew.className = 'px-4 py-2 bg-blue-50 text-blue-700 hover:bg-blue-100 cursor-pointer text-sm font-normal transition';
+                divNew.innerText = '+ Tambah "' + input.value + '"';
+                divNew.onclick = (e) => {
+                    e.stopPropagation();
+                    const newItem = input.value.trim(); 
+                    savePresetOption('flights', newItem); addFlightChip(newItem); 
+                    input.value = ''; renderList(); input.focus();
+                };
+                dropdown.appendChild(divNew);
+            }
+            
+            if (dropdown.innerHTML === '' && selectedFlightArray.length > 0 && val === '') {
+                const divEmpty = document.createElement('div');
+                divEmpty.className = 'px-4 py-3 text-gray-400 text-sm italic text-center';
+                divEmpty.innerText = 'Semua nomor penerbangan telah dipilih.';
+                dropdown.appendChild(divEmpty);
+            }
+        }
+    }
+    setupFlightDropdown();
+
+    function addFlightChip(flight) { if(!selectedFlightArray.includes(flight)) { selectedFlightArray.push(flight); renderFlightChips(); } }
+    
+    function renderFlightChips() {
+        const container = document.getElementById('selectedFlights'); container.innerHTML = '';
+        selectedFlightArray.forEach(f => {
+            const chip = document.createElement('span');
+            chip.className = 'bg-blue-100 text-blue-800 text-xs font-bold px-3 py-1.5 rounded-full border border-blue-200 flex items-center gap-2 shadow-sm';
+            
+            const spanText = document.createElement('span'); spanText.textContent = f;
+            const icon = document.createElement('i');
+            icon.className = 'fa-solid fa-circle-xmark cursor-pointer hover:text-red-500 ml-1.5';
+            icon.onclick = () => removeFlightChip(f);
+            
+            chip.appendChild(spanText); chip.appendChild(icon); container.appendChild(chip);
+        });
+    }
+    
+    function removeFlightChip(flight) { 
+        selectedFlightArray = selectedFlightArray.filter(f => f !== flight); renderFlightChips(); 
+        const input = document.getElementById('inputFlight'); const dropdown = document.getElementById('dropdownFlight');
+        if (dropdown && !dropdown.classList.contains('hidden')) input.dispatchEvent(new Event('input'));
+    }
+
+    function toggleSif(sif) {
+        const selectedTanggal = document.getElementById('inputTanggal').value;
+
+        const duplicateExists = currentLogs.some(log => {
+            if(editingLogId && log.id === editingLogId) return false;
+            return log.tanggal === selectedTanggal && log.sif === sif;
+        });
+
+        if(duplicateExists) {
+            const checkedRadio = document.querySelector('input[name="sif"]:checked');
+            if(checkedRadio) checkedRadio.checked = false;
+            document.getElementById('dynamicFields').classList.add('hidden');
+            showSifExistModal(sif, formatDate(selectedTanggal)); return;
+        }
+
+        const sifErrorMessage = document.getElementById('sifErrorMessage');
+        if (sifErrorMessage) sifErrorMessage.classList.add('hidden');
+        const sifCardContainer = document.getElementById('sifContainer').querySelector('.grid');
+        if (sifCardContainer) sifCardContainer.classList.remove('ring-2', 'ring-red-500');
+
+        document.getElementById('dynamicFields').classList.remove('hidden');
+        document.getElementById('fieldsPagi').classList.add('hidden');
+        document.getElementById('fieldsSiang').classList.add('hidden');
+        document.getElementById('fieldsMalam').classList.add('hidden');
+
+        if(sif === 'Pagi') document.getElementById('fieldsPagi').classList.remove('hidden');
+        if(sif === 'Siang') document.getElementById('fieldsSiang').classList.remove('hidden');
+        if(sif === 'Malam') document.getElementById('fieldsMalam').classList.remove('hidden');
+    }
+
+    const pgGelEl = document.getElementById('pgGelombang');
+    if(pgGelEl) {
+        pgGelEl.addEventListener('change', (e) => {
+            const noteInput = document.getElementById('pgGelombangNote');
+            if (e.target.value === 'Catatan') { noteInput.classList.remove('hidden'); } 
+            else { noteInput.classList.add('hidden'); }
+        });
+    }
+
+    document.getElementById('adwsStatus').addEventListener('change', (e) => {
+        const container = document.getElementById('adwsUpdateContainer');
+        if(e.target.value === 'Tidak Ada') { 
+            container.classList.add('hidden'); container.classList.remove('flex');
+        } else { 
+            container.classList.remove('hidden'); container.classList.add('flex');
+        }
+    });
+
+    document.getElementById('logbookForm').addEventListener('submit', async (e) => {
+        e.preventDefault(); 
+        
+        const inputNamaVal = document.getElementById('inputNama').value;
+        if (!inputNamaVal.trim()) {
+            await customAlert("Bidang Nama Forecaster wajib diisi", "Validasi Form", "warning");
+            const wrap = document.getElementById('inputNamaDisplay');
+            if(wrap) { wrap.scrollIntoView({ behavior: 'smooth', block: 'center' }); setTimeout(()=>wrap.click(), 300); }
+            return;
+        }
+
+        const isTukar = document.getElementById('toggleTukarDinas').checked;
+        const inputNamaTukar = document.getElementById('inputNamaTukar');
+        if (isTukar && !inputNamaTukar.value.trim()) {
+            await customAlert("Harap pilih nama forecaster yang Anda gantikan", "Validasi Form", "warning");
+            const wrap = inputNamaTukar.closest('.custom-select-wrapper');
+            if(wrap) { wrap.scrollIntoView({ behavior: 'smooth', block: 'center' }); setTimeout(()=>wrap.children[1].click(), 300); }
+            return;
+        }
+
+        const selectedSifRadio = document.querySelector('input[name="sif"]:checked');
+        if (!selectedSifRadio) {
+            const sifContainer = document.getElementById('sifContainer');
+            const sifCardContainer = sifContainer.querySelector('.grid');
+            if (sifCardContainer) {
+                sifCardContainer.classList.add('ring-2', 'ring-red-500', 'rounded-xl');
+                setTimeout(() => sifCardContainer.classList.remove('ring-2', 'ring-red-500'), 3000);
+            }
+            sifContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            await customAlert("Wajib pilih salah satu sif (Pagi / Siang / Malam).", "Validasi Form", "warning");
+            return;
+        }
+
+        const requiredFields = [];
+        if(selectedSifRadio.value === 'Pagi') {
+            requiredFields.push({id: 'pgExpertize', name: 'Expertize Meteorologi Maritim'});
+            requiredFields.push({id: 'pgGelombang', name: 'PD Gelombang Tinggi Perairan Kaltara'});
+            if(document.getElementById('pgGelombang').value === 'Catatan') requiredFields.push({id: 'pgGelombangNote', name: 'Catatan Gelombang'});
+            requiredFields.push({id: 'pgTAF', name: 'Mengirim TAF 06:00 UTC'});
+        } else if (selectedSifRadio.value === 'Siang') {
+            requiredFields.push({id: 'sgBriefing', name: 'Briefing NDF Virtual Meeting'});
+            requiredFields.push({id: 'sgExpertize', name: 'Expertize Digital Forecast'});
+            requiredFields.push({id: 'sgHarmonisasi', name: 'Harmonisasi Digital Forecast'});
+            requiredFields.push({id: 'sgTAF', name: 'Mengirim TAF 12:00 UTC'});
+        } else if (selectedSifRadio.value === 'Malam') {
+            requiredFields.push({id: 'mlExpertize', name: 'Expertize Digital Forecast'});
+            requiredFields.push({id: 'mlHarmonisasi', name: 'Harmonisasi Digital Forecast'});
+            requiredFields.push({id: 'mlCuaca3', name: 'Peringatan Dini Cuaca Tiga Harian Kaltara'});
+            requiredFields.push({id: 'mlProspek', name: 'Mengisi Prospek Cuaca'});
+            requiredFields.push({id: 'mlTAF18', name: 'TAF 18:00 UTC'});
+            requiredFields.push({id: 'mlTAF00', name: 'TAF 00:00 UTC'});
+        }
+
+        if(document.getElementById('adwsStatus').value !== 'Tidak Ada') {
+            requiredFields.push({id: 'adwsUpdate', name: 'Jumlah Update AD/WS WARNING'});
+        }
+        if(document.getElementById('ttLainnya').checked) {
+            requiredFields.push({id: 'ttLainnyaNote', name: 'Sebutkan Tugas Tambahan Lainnya'});
+        }
+
+        for(let field of requiredFields) {
+            const el = document.getElementById(field.id);
+            if(!el.value.trim()) {
+                await customAlert('Bidang "' + field.name + '" wajib diisi.', "Validasi Form", "warning");
+                if(el.tagName === 'SELECT') {
+                    const wrap = el.closest('.custom-select-wrapper');
+                    if(wrap) { wrap.scrollIntoView({ behavior: 'smooth', block: 'center' }); setTimeout(()=>wrap.children[1].click(), 300); }
+                } else {
+                    el.scrollIntoView({ behavior: 'smooth', block: 'center' }); setTimeout(() => el.focus(), 300);
+                }
+                return;
+            }
+        }
+
+        const selectedTanggal = document.getElementById('inputTanggal').value;
+        const selectedSif = selectedSifRadio.value;
+
+        const duplicateExists = currentLogs.some(log => {
+            if(editingLogId && log.id === editingLogId) return false;
+            return log.tanggal === selectedTanggal && log.sif === selectedSif;
+        });
+
+        if(duplicateExists) { showSifExistModal(selectedSif, formatDate(selectedTanggal)); return; }
+        
+        const hasSignature = (!signaturePad.isEmpty()) || (existingSignatureData !== null);
+        if (!hasSignature) { showTTDModal(); return; }
+
+        const btn = document.getElementById('submitBtn');
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> Memproses...'; btn.disabled = true;
+
+        const catatan = document.getElementById('catatanDinas').value || 'Tidak ada kendala';
+        const ttdBase64 = !signaturePad.isEmpty() ? signaturePad.toDataURL('image/png') : existingSignatureData;
+
+        const pendingFlight = document.getElementById('inputFlight').value.trim();
+        if (pendingFlight && !selectedFlightArray.includes(pendingFlight)) {
+            savePresetOption('flights', pendingFlight); selectedFlightArray.push(pendingFlight);
+        }
+        if(selectedFlightArray.length > 0) { selectedFlightArray.forEach(flight => savePresetOption('flights', flight)); }
+
+        const tugasTambahan = [];
+        if(document.getElementById('ttRespon').checked) { const note = document.getElementById('ttResponNote').value.trim(); tugasTambahan.push(note ? 'Membuat Respon Cepat Kejadian Cuaca Ekstrem (' + note + ')' : 'Membuat Respon Cepat Kejadian Cuaca Ekstrem'); }
+        if(document.getElementById('ttAnalisis').checked) { const note = document.getElementById('ttAnalisisNote').value.trim(); tugasTambahan.push(note ? 'Membuat Analisis Kejadian Cuaca Ekstrem (' + note + ')' : 'Membuat Analisis Kejadian Cuaca Ekstrem'); }
+        if(document.getElementById('ttWawancara').checked) { const note = document.getElementById('ttWawancaraNote').value.trim(); tugasTambahan.push(note ? 'Wawancara Media (' + note + ')' : 'Wawancara Media'); }
+        if(document.getElementById('ttROB').checked) { const note = document.getElementById('ttROBNote').value.trim(); tugasTambahan.push(note ? 'Membuat Peringatan Potensi Banjir ROB (' + note + ')' : 'Membuat Peringatan Potensi Banjir ROB'); }
+        if(document.getElementById('ttLainnya').checked) { const note = document.getElementById('ttLainnyaNote').value.trim(); tugasTambahan.push('Lainnya: ' + note); }
+
+        let detailSif = [];
+        if(selectedSif === 'Pagi') {
+            let exp = document.getElementById('pgExpertize').value; let expNote = document.getElementById('pgExpertizeNote').value.trim();
+            if(exp) detailSif.push('Expertize Maritim: ' + exp + (expNote ? ' (' + expNote + ')' : ''));
+            let gel = document.getElementById('pgGelombang').value;
+            if(gel === 'Catatan') gel = 'Catatan (' + document.getElementById('pgGelombangNote').value + ')';
+            if(gel) detailSif.push('PD Gelombang Tinggi Perairan Kaltara: ' + gel);
+            let taf = document.getElementById('pgTAF').value; let tafNote = document.getElementById('pgTAFNote').value.trim();
+            if(taf) detailSif.push('TAF 06:00 UTC: ' + taf + (tafNote ? ' (' + tafNote + ')' : ''));
+        } else if (selectedSif === 'Siang') {
+            let briefing = document.getElementById('sgBriefing').value; let briefingNote = document.getElementById('sgBriefingNote').value.trim();
+            if(briefing) detailSif.push('Briefing NDF: ' + briefing + (briefingNote ? ' (' + briefingNote + ')' : ''));
+            let exp = document.getElementById('sgExpertize').value; let expNote = document.getElementById('sgExpertizeNote').value.trim();
+            if(exp) detailSif.push('Expertize DigFor: ' + exp + (expNote ? ' (' + expNote + ')' : ''));
+            let harm = document.getElementById('sgHarmonisasi').value; let harmNote = document.getElementById('sgHarmonisasiNote').value.trim();
+            if(harm) detailSif.push('Harmonisasi DigFor: ' + harm + (harmNote ? ' (' + harmNote + ')' : ''));
+            let taf = document.getElementById('sgTAF').value; let tafNote = document.getElementById('sgTAFNote').value.trim();
+            if(taf) detailSif.push('TAF 12:00 UTC: ' + taf + (tafNote ? ' (' + tafNote + ')' : ''));
+        } else if (selectedSif === 'Malam') {
+            let exp = document.getElementById('mlExpertize').value; let expNote = document.getElementById('mlExpertizeNote').value.trim();
+            if(exp) detailSif.push('Expertize DigFor: ' + exp + (expNote ? ' (' + expNote + ')' : ''));
+            let harm = document.getElementById('mlHarmonisasi').value; let harmNote = document.getElementById('mlHarmonisasiNote').value.trim();
+            if(harm) detailSif.push('Harmonisasi DigFor: ' + harm + (harmNote ? ' (' + harmNote + ')' : ''));
+            let cuaca = document.getElementById('mlCuaca3').value; let cuacaNote = document.getElementById('mlCuaca3Note').value.trim();
+            if(cuaca) {
+                let statusDiseminasi = cuaca === 'Sudah' ? 'sudah diseminasikan' : (cuaca === 'Belum' ? 'belum diseminasikan' : cuaca);
+                detailSif.push('PD Cuaca 3 harian: ' + statusDiseminasi + (cuacaNote ? ' (' + cuacaNote + ')' : ''));
+            }
+            let prospek = document.getElementById('mlProspek').value; if(prospek) detailSif.push('Prospek Cuaca: ' + prospek);
+            let taf18 = document.getElementById('mlTAF18').value; let taf18Note = document.getElementById('mlTAF18Note').value.trim();
+            if(taf18) detailSif.push('TAF 18:00 UTC: ' + taf18 + (taf18Note ? ' (' + taf18Note + ')' : ''));
+            let taf00 = document.getElementById('mlTAF00').value; let taf00Note = document.getElementById('mlTAF00Note').value.trim();
+            if(taf00) detailSif.push('TAF 00:00 UTC: ' + taf00 + (taf00Note ? ' (' + taf00Note + ')' : ''));
+        }
+
+        let nowcastingVal = document.getElementById('nowcasting').value;
+        if(nowcastingVal && parseInt(nowcastingVal) > 0) detailSif.push('Nowcasting: ' + nowcastingVal + ' kali update');
+        else detailSif.push('Nowcasting: Tidak ada');
+
+        let adwsStatus = document.getElementById('adwsStatus').value;
+        if(adwsStatus !== 'Tidak Ada') {
+            let adwsUpdate = document.getElementById('adwsUpdate').value || 0;
+            detailSif.push('AD/WS Warning: ' + adwsStatus + ' (' + adwsUpdate + ' kali update)');
+        } else detailSif.push('AD/WS Warning: Tidak Ada');
+
+        const logData = {
+            nama: inputNamaVal, tanggal: selectedTanggal, sif: selectedSif, catatan: catatan,
+            flightDocs: selectedFlightArray, tugasSifKhusus: detailSif, tugasTambahan: tugasTambahan,
+            tandaTangan: ttdBase64, updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            isTukarDinas: isTukar, menggantikan: isTukar ? document.getElementById('inputNamaTukar').value.trim() : null
+        };
+
+        if(editingLogId) {
+            db.collection("logbook_data").doc(editingLogId).update(logData).then(async () => {
+                btn.innerHTML = '<i class="fa-solid fa-circle-check mr-2"></i> Tersimpan ✅';
+                await customAlert("Data logbook berhasil diperbarui di cloud!", "Berhasil", "success");
+                cancelEdit();
+            }).catch(async err => {
+                await customAlert("Gagal update: " + err.message, "Error", "error");
+                btn.innerHTML = '<i class="fa-solid fa-arrows-rotate mr-2"></i> Update Logbook'; 
+                btn.disabled = false;
+            });
+        } else {
+            db.collection("logbook_data").add(logData).then(async () => {
+                btn.innerHTML = '<i class="fa-solid fa-circle-check mr-2"></i> Tersimpan ✅';
+                await customAlert("Data logbook baru tersimpan di cloud!", "Berhasil", "success");
+                resetForm();
+            }).catch(async err => {
+                await customAlert("Gagal menyimpan: " + err.message, "Error", "error");
+                btn.innerHTML = '<i class="fa-solid fa-save mr-2"></i> Simpan ke Database'; 
+                btn.disabled = false;
+            });
+        }
+    });
+
+    function resetForm() {
+        const form = document.getElementById('logbookForm');
+        form.reset();
+        fpTanggal.setDate(getEffectiveDefaultDate());
+        
+        // Reset Multi-Forecaster
+        selectedForecasters = [];
+        isMultiForecaster = false;
+        btnMulti.className = "bg-gray-50 border border-gray-200 text-gray-400 hover:bg-gray-200 hover:text-gray-700 w-11 rounded-lg transition shadow-sm z-10 text-sm flex items-center justify-center focus:outline-none";
+        btnMulti.title = "Aktifkan Dinas Lebih Dari 1 Orang";
+        updateNamaDisplay();
+        
+        document.getElementById('toggleTukarDinas').checked = false;
+        const tooltipTukar = document.getElementById('tooltipTukarDinas');
+        if(tooltipTukar) tooltipTukar.title = "Aktifkan jika Anda menggantikan dinas orang lain";
+
+        document.getElementById('containerNamaTukar').classList.add('hidden');
+        document.getElementById('containerNamaTukar').classList.remove('flex');
+        document.getElementById('inputNamaTukar').value = '';
+
+        const sifErrorMessage = document.getElementById('sifErrorMessage'); if (sifErrorMessage) sifErrorMessage.classList.add('hidden');
+        const sifCardContainer = document.getElementById('sifContainer').querySelector('.grid'); if (sifCardContainer) sifCardContainer.classList.remove('ring-2', 'ring-red-500');
+        document.getElementById('dynamicFields').classList.add('hidden');
+        document.getElementById('fieldsPagi').classList.add('hidden'); document.getElementById('fieldsSiang').classList.add('hidden'); document.getElementById('fieldsMalam').classList.add('hidden');
+        document.getElementById('labelttLainnyaReq').classList.add('hidden');
+        const gelNote = document.getElementById('pgGelombangNote'); if(gelNote) { gelNote.classList.add('hidden'); gelNote.value = ''; }
+
+        const adwsContainer = document.getElementById('adwsUpdateContainer'); const adwsInput = document.getElementById('adwsUpdate');
+        if(adwsContainer && adwsInput) { adwsContainer.classList.add('hidden'); adwsContainer.classList.remove('flex'); adwsInput.value = ''; }
+
+        clearSignature(); selectedFlightArray = []; renderFlightChips(); updateFlightPlaceholder();
+        document.getElementById('submitBtn').innerHTML = '<i class="fa-solid fa-save mr-2"></i> Simpan ke Database';
+        document.getElementById('submitBtn').disabled = false; document.getElementById('cancelEditBtn').classList.add('hidden'); 
+        
+        editingLogId = null;
+        existingSignatureData = null;
+
+        setTimeout(() => { document.querySelectorAll('select').forEach(s => s.dispatchEvent(new Event('sync-custom-select'))); }, 50);
+    }
+
+    db.collection("logbook_data").onSnapshot((snapshot) => {
+        currentLogs = []; snapshot.forEach((doc) => { const data = doc.data(); data.id = doc.id; currentLogs.push(data); });
+        renderTable(); renderMonitoring();
+    });
+
+    function getValidatedFilter() {
+        const month = parseInt(document.getElementById('filterMonth').value) || (getWitaDate().getMonth() + 1);
+        let year = parseInt(document.getElementById('filterYear').value);
+        if (isNaN(year) || year < 2000) year = getWitaDate().getFullYear();
+        return { month, year, monthStr: String(month).padStart(2, '0') };
+    }
+
+    function fetchSchedule() {
+        const { month, year, monthStr } = getValidatedFilter();
+        const docId = year + '-' + monthStr;
+
+        if (scheduleUnsubscribe) scheduleUnsubscribe();
+        currentScheduleData = null; 
+
+        scheduleUnsubscribe = db.collection("jadwal_dinas").doc(docId).onSnapshot((doc) => {
+            if (doc.exists) currentScheduleData = doc.data();
+            else currentScheduleData = null;
+            renderScheduleTable(); 
+            renderMonitoring();
+        });
+    }
+    fetchSchedule();
+
+    // --- 6. HAPUS & EDIT DATA LOGBOOK ---
+    async function deleteLog(id) {
+        const confirmed = await customConfirm("Apakah Anda yakin ingin menghapus data logbook ini dari Cloud Database?", "Hapus Data");
+        if(confirmed) {
+            db.collection("logbook_data").doc(id).delete().then(async () => {
+                await customAlert("Data berhasil dihapus!", "Berhasil", "success");
+                if (editingLogId === id) cancelEdit();
+            }).catch(async err => await customAlert("Gagal menghapus: " + err.message, "Error", "error"));
+        }
+    }
+
+    function editLog(id) {
+        const log = currentLogs.find(l => l.id === id);
+        if(!log) return;
+        resetForm(); 
+        editingLogId = id;
+        existingSignatureData = log.tandaTangan || null;
+        
+        const names = log.nama ? log.nama.split(';').map(s => s.trim()).filter(Boolean) : [];
+        selectedForecasters = names;
+        if (names.length > 1) {
+            isMultiForecaster = true;
+            btnMulti.className = "border w-11 rounded-lg transition shadow-sm z-10 text-sm flex items-center justify-center focus:outline-none bg-blue-100 border-blue-300 text-blue-700";
+            btnMulti.title = "Nonaktifkan Dinas Lebih Dari 1 Orang";
+        } else {
+            isMultiForecaster = false;
+            btnMulti.className = "bg-gray-50 border border-gray-200 text-gray-400 hover:bg-gray-200 hover:text-gray-700 w-11 rounded-lg transition shadow-sm z-10 text-sm flex items-center justify-center focus:outline-none";
+            btnMulti.title = "Aktifkan Dinas Lebih Dari 1 Orang";
+        }
+        updateNamaDisplay();
+        
+        if(log.tanggal) fpTanggal.setDate(log.tanggal);
+        document.getElementById('catatanDinas').value = (log.catatan === 'Tidak ada kendala') ? '' : (log.catatan || '');
+
+        const toggleTukar = document.getElementById('toggleTukarDinas');
+        const containerTukar = document.getElementById('containerNamaTukar');
+        const inputTukar = document.getElementById('inputNamaTukar');
+        const tooltipTukar = document.getElementById('tooltipTukarDinas');
+        
+        if (log.isTukarDinas && log.menggantikan) {
+            toggleTukar.checked = true;
+            if(tooltipTukar) tooltipTukar.title = "Nonaktifkan fitur Tukar Dinas";
+            containerTukar.classList.remove('hidden');
+            containerTukar.classList.add('flex');
+            
+            if (!savedNames.includes(log.menggantikan)) {
+                const optTukar = document.createElement('option');
+                optTukar.value = log.menggantikan;
+                optTukar.textContent = log.menggantikan + ' (Data Historis)';
+                inputTukar.appendChild(optTukar);
+            }
+            inputTukar.value = log.menggantikan;
+            populateTukarDinasSelect(); 
+        } else {
+            toggleTukar.checked = false;
+            if(tooltipTukar) tooltipTukar.title = "Aktifkan jika Anda menggantikan dinas orang lain";
+            containerTukar.classList.add('hidden');
+            containerTukar.classList.remove('flex');
+            inputTukar.value = '';
+        }
+
+        const sifRadios = document.querySelectorAll('input[name="sif"]');
+        sifRadios.forEach(r => { if(r.value === log.sif) { r.checked = true; toggleSif(log.sif); } });
+
+        selectedFlightArray = (log.flightDocs && Array.isArray(log.flightDocs)) ? [...log.flightDocs] : []; renderFlightChips(); updateFlightPlaceholder();
+        if (log.tandaTangan) { 
+            try { signaturePad.fromDataURL(log.tandaTangan); } 
+            catch(e) { console.error("Gagal memuat tanda tangan:", e); } 
+        }
+
+        if (log.tugasSifKhusus && Array.isArray(log.tugasSifKhusus)) {
+            log.tugasSifKhusus.forEach(item => {
+                let splitIndex = item.indexOf(': '); if (splitIndex === -1) return;
+                let key = item.substring(0, splitIndex).trim(); let valWithNote = item.substring(splitIndex + 2).trim();
+                let noteMatch = valWithNote.match(/^(.*?)(?:\s*\((.*)\))?$/);
+                let val = noteMatch ? noteMatch[1].trim() : valWithNote; let note = (noteMatch && noteMatch[2]) ? noteMatch[2].trim() : '';
+
+                if (key === 'Expertize Maritim') {
+                    const el = document.getElementById('pgExpertize'); if (el) el.value = val; const noteEl = document.getElementById('pgExpertizeNote'); if (noteEl) noteEl.value = note;
+                } else if (key === 'PD Gelombang Tinggi Perairan Kaltara') {
+                    const el = document.getElementById('pgGelombang');
+                    if (el) {
+                        if (val.startsWith('Catatan')) {
+                            el.value = 'Catatan'; const noteEl = document.getElementById('pgGelombangNote');
+                            if (noteEl) { noteEl.value = note || val.replace(/^Catatan\s*\(?/, '').replace(/\)?$/, ''); noteEl.classList.remove('hidden'); }
+                        } else el.value = val;
+                    }
+                } else if (key === 'TAF 06:00 UTC') {
+                    const el = document.getElementById('pgTAF'); if (el) el.value = val; const noteEl = document.getElementById('pgTAFNote'); if (noteEl) noteEl.value = note;
+                } else if (key === 'Briefing NDF') {
+                    const el = document.getElementById('sgBriefing'); if (el) el.value = val; const noteEl = document.getElementById('sgBriefingNote'); if (noteEl) noteEl.value = note;
+                } else if (key === 'Expertize DigFor') {
+                    if (log.sif === 'Siang') { const el = document.getElementById('sgExpertize'); if (el) el.value = val; const noteEl = document.getElementById('sgExpertizeNote'); if (noteEl) noteEl.value = note; }
+                    else if (log.sif === 'Malam') { const el = document.getElementById('mlExpertize'); if (el) el.value = val; const noteEl = document.getElementById('mlExpertizeNote'); if (noteEl) noteEl.value = note; }
+                } else if (key === 'Harmonisasi DigFor') {
+                    if (log.sif === 'Siang') { const el = document.getElementById('sgHarmonisasi'); if (el) el.value = val; const noteEl = document.getElementById('sgHarmonisasiNote'); if (noteEl) noteEl.value = note; }
+                    else if (log.sif === 'Malam') { const el = document.getElementById('mlHarmonisasi'); if (el) el.value = val; const noteEl = document.getElementById('mlHarmonisasiNote'); if (noteEl) noteEl.value = note; }
+                } else if (key === 'TAF 12:00 UTC') {
+                    const el = document.getElementById('sgTAF'); if (el) el.value = val; const noteEl = document.getElementById('sgTAFNote'); if (noteEl) noteEl.value = note;
+                } else if (key === 'Cuaca 3 Harian' || key === 'PD Cuaca 3 harian' || key.toLowerCase().includes('cuaca 3 harian')) {
+                    const el = document.getElementById('mlCuaca3');
+                    if (el) {
+                        const statusCheck = val.toLowerCase();
+                        if (statusCheck.includes('sudah')) el.value = 'Sudah';
+                        else if (statusCheck.includes('belum')) el.value = 'Belum';
+                    }
+                    const noteEl = document.getElementById('mlCuaca3Note');
+                    if (noteEl) noteEl.value = note;
+                } else if (key === 'Prospek Cuaca') {
+                    const el = document.getElementById('mlProspek'); if (el) el.value = val;
+                } else if (key === 'TAF 18:00 UTC') {
+                    const el = document.getElementById('mlTAF18'); if (el) el.value = val; const noteEl = document.getElementById('mlTAF18Note'); if (noteEl) noteEl.value = note;
+                } else if (key === 'TAF 00:00 UTC') {
+                    const el = document.getElementById('mlTAF00'); if (el) el.value = val; const noteEl = document.getElementById('mlTAF00Note'); if (noteEl) noteEl.value = note;
+                } else if (key === 'Nowcasting') {
+                    const numMatch = valWithNote.match(/\d+/); if (numMatch) document.getElementById('nowcasting').value = numMatch[0];
+                } else if (key === 'AD/WS Warning') {
+                    const statusSelect = document.getElementById('adwsStatus'); const updateContainer = document.getElementById('adwsUpdateContainer'); const updateInput = document.getElementById('adwsUpdate');
+                    if (valWithNote.includes('Tidak Ada')) {
+                        statusSelect.value = 'Tidak Ada'; updateContainer.classList.add('hidden'); updateContainer.classList.remove('flex'); updateInput.value = '';
+                    } else {
+                        if (valWithNote.startsWith('AD')) statusSelect.value = 'AD'; else if (valWithNote.startsWith('WS')) statusSelect.value = 'WS';
+                        const numMatch = valWithNote.match(/\d+/);
+                        updateInput.value = numMatch ? numMatch[0] : '0';
+                        updateContainer.classList.remove('hidden'); updateContainer.classList.add('flex');
+                    }
+                }
+            });
+        }
+
+        if (log.tugasTambahan && Array.isArray(log.tugasTambahan)) {
+            log.tugasTambahan.forEach(str => {
+                let noteMatch = str.match(/\((.*)\)$/); let note = noteMatch ? noteMatch[1].trim() : '';
+                if (str.startsWith('Membuat Respon Cepat Kejadian Cuaca Ekstrem')) { document.getElementById('ttRespon').checked = true; document.getElementById('ttResponNote').value = note; }
+                else if (str.startsWith('Membuat Analisis Kejadian Cuaca Ekstrem')) { document.getElementById('ttAnalisis').checked = true; document.getElementById('ttAnalisisNote').value = note; }
+                else if (str.startsWith('Wawancara Media')) { document.getElementById('ttWawancara').checked = true; document.getElementById('ttWawancaraNote').value = note; }
+                else if (str.startsWith('Membuat Peringatan Potensi Banjir ROB')) { document.getElementById('ttROB').checked = true; document.getElementById('ttROBNote').value = note; }
+                else if (str.startsWith('Lainnya:')) {
+                    document.getElementById('ttLainnya').checked = true; const valLain = str.replace('Lainnya:', '').trim(); document.getElementById('ttLainnyaNote').value = valLain;
+                    document.getElementById('labelttLainnyaReq').classList.remove('hidden');
+                }
+            });
+        }
+
+        document.getElementById('submitBtn').innerHTML = '<i class="fa-solid fa-arrows-rotate mr-2"></i> Update Logbook';
+        document.getElementById('submitBtn').disabled = false; document.getElementById('cancelEditBtn').classList.remove('hidden');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+
+        setTimeout(() => { document.querySelectorAll('select').forEach(s => s.dispatchEvent(new Event('sync-custom-select'))); }, 50);
+    }
+
+    function cancelEdit() { resetForm(); }
+
+    function renderTable() {
+        const tableBody = document.getElementById('tableBody'); tableBody.innerHTML = '';
+        const { month, year } = getValidatedFilter();
+
+        const filtered = currentLogs.filter(log => {
+            if(!log.tanggal) return false;
+            const parts = log.tanggal.split('-'); if(parts.length !== 3) return false;
+            return parseInt(parts[1]) === month && parseInt(parts[0]) === year;
+        });
+
+        if(filtered.length === 0) { tableBody.innerHTML = '<tr><td colspan="5" class="text-center py-6 text-gray-500 font-medium">Tidak ada data pada bulan dan tahun ini.</td></tr>'; return; }
+
+        filtered.sort((a, b) => {
+            if (a.tanggal !== b.tanggal) return b.tanggal.localeCompare(a.tanggal);
+            return (sifWeight[b.sif] || 0) - (sifWeight[a.sif] || 0); 
+        });
+
+        let no = filtered.length;
+        filtered.forEach((data) => {
+            const tr = document.createElement('tr'); tr.className = "hover:bg-gray-50 transition";
+            
+            let displayNameFormatted = escapeHTML(formatForecasterNames(data.nama));
+
+            tr.innerHTML = '<td class="px-5 py-4 border-x text-center font-bold text-gray-600 whitespace-nowrap">' + (no--) + '</td>' +
+                '<td class="px-5 py-4 border-x font-semibold text-blue-700 leading-tight whitespace-normal break-words min-w-[200px] max-w-[300px]">' + displayNameFormatted + '</td>' +
+                '<td class="px-5 py-4 border-x text-center whitespace-nowrap">' + formatDate(data.tanggal) + '<br>Sif ' + (data.sif || '-') + '</td>' +
+                '<td class="px-5 py-4 border-x italic text-gray-600 whitespace-normal break-words min-w-[200px]">' + (escapeHTML(data.catatan) || '-') + '</td>' +
+                '<td class="px-5 py-4 border-x text-center whitespace-nowrap">' +
+                    '<button onclick="editLog(\'' + data.id + '\')" class="bg-amber-500 hover:bg-amber-600 text-white px-2.5 py-1.5 rounded-lg text-xs font-bold mr-1 transition"><i class="fa-solid fa-pen"></i> Edit</button>' +
+                    '<button onclick="deleteLog(\'' + data.id + '\')" class="bg-red-500 hover:bg-red-600 text-white px-2.5 py-1.5 rounded-lg text-xs font-bold transition"><i class="fa-solid fa-trash"></i> Hapus</button>' +
+                '</td>';
+            tableBody.appendChild(tr);
+        });
+    }
+
+    function renderMonitoring() {
+        const monitoringContainer = document.getElementById('monitoringBody'); const summaryBadge = document.getElementById('monitoringSummary'); const subtitleEl = document.getElementById('monitoringSubtitle');
+        if(!monitoringContainer) return; monitoringContainer.innerHTML = '';
+        const { month, year } = getValidatedFilter();
+        const monthName = monthNames[month - 1] || '';
+        
+        if(subtitleEl) subtitleEl.innerHTML = 'Mendeteksi sif yang belum terisi pada Bulan ' + monthName + ' Tahun&nbsp;' + year;
+
+        const nowWITA = getWitaDate();
+        const currentYear = nowWITA.getFullYear(); 
+        const currentMonth = nowWITA.getMonth() + 1;
+
+        const isFuturePeriod = (year > currentYear) || (year === currentYear && month > currentMonth);
+        if (isFuturePeriod) {
+            summaryBadge.innerHTML = '<span class="px-3 py-1 bg-blue-100 text-blue-700 rounded-full font-bold text-xs"><i class="fa-solid fa-clock-rotate-left mr-1"></i> Periode Belum Berjalan</span>';
+            monitoringContainer.innerHTML = '<div class="p-6 text-center text-gray-500 font-medium flex items-center justify-center gap-2"><i class="fa-solid fa-calendar-xmark text-2xl text-blue-500"></i><span>Monitoring untuk Bulan ' + monthName + ' Tahun&nbsp;' + year + ' belum dapat ditampilkan karena periode bulan ini belum berjalan.</span></div>';
+            return;
+        }
+
+        const daysInSelectedMonth = new Date(year, month, 0).getDate();
+        let missingList = []; 
+        let totalMissingShifts = 0;
+        let totalPassedShifts = 0;
+
+        for (let d = 1; d <= daysInSelectedMonth; d++) {
+            const dayStr = String(d).padStart(2, '0'); 
+            const monthStr = String(month).padStart(2, '0'); 
+            const dateStr = year + '-' + monthStr + '-' + dayStr;
+            
+            const pagiCutoff = new Date(Date.UTC(year, month - 1, d, 7, 0, 0)); 
+            const siangCutoff = new Date(Date.UTC(year, month - 1, d, 13, 0, 0)); 
+            const malamCutoff = new Date(Date.UTC(year, month - 1, d + 1, 1, 0, 0));
+            const realNow = new Date();
+            
+            const filledShifts = currentLogs.filter(log => log.tanggal === dateStr).map(log => log.sif);
+            let missingForThisDay = [];
+
+            if (realNow >= pagiCutoff) {
+                totalPassedShifts++;
+                if (!filledShifts.includes('Pagi')) missingForThisDay.push({ sif: 'Pagi', assignedNames: getAssignedForecasters(d, 'Pagi') });
+            }
+            if (realNow >= siangCutoff) {
+                totalPassedShifts++;
+                if (!filledShifts.includes('Siang')) missingForThisDay.push({ sif: 'Siang', assignedNames: getAssignedForecasters(d, 'Siang') });
+            }
+            if (realNow >= malamCutoff) {
+                totalPassedShifts++;
+                if (!filledShifts.includes('Malam')) missingForThisDay.push({ sif: 'Malam', assignedNames: getAssignedForecasters(d, 'Malam') });
+            }
+
+            if (missingForThisDay.length > 0) { 
+                missingList.push({ tanggal: dateStr, missing: missingForThisDay }); 
+                totalMissingShifts += missingForThisDay.length; 
+            }
+        }
+
+        if (totalPassedShifts === 0) {
+            summaryBadge.innerHTML = '<span class="px-3 py-1 bg-blue-100 text-blue-700 rounded-full font-bold text-xs"><i class="fa-solid fa-clock mr-1"></i> Belum Ada Sif Selesai</span>';
+            monitoringContainer.innerHTML = '<div class="p-6 text-center text-gray-500 font-medium flex items-center justify-center gap-2"><i class="fa-solid fa-hourglass-start text-2xl text-blue-500"></i><span>Bulan ' + monthName + ' Tahun&nbsp;' + year + ' baru saja dimulai. Belum ada sif dinas yang melewati batas pengisian logbook.</span></div>';
+            return;
+        }
+
+        if (totalMissingShifts === 0) {
+            summaryBadge.innerHTML = '<span class="px-3 py-1 bg-green-100 text-green-700 rounded-full font-bold text-xs"><i class="fa-solid fa-circle-check mr-1"></i> 100% Terisi Lengkap 🎉</span>';
+            monitoringContainer.innerHTML = '<div class="p-6 text-center text-emerald-600 font-bold flex items-center justify-center gap-2"><i class="fa-solid fa-circle-check text-2xl"></i><span>Luar biasa! Seluruh sif yang telah berjalan pada Bulan ' + monthName + ' Tahun&nbsp;' + year + ' terisi lengkap tanpa ada yang terlewat.</span></div>'; 
+            return;
+        }
+
+        summaryBadge.innerHTML = '<span class="px-3 py-1 bg-red-100 text-red-700 rounded-full font-bold text-xs"><i class="fa-solid fa-triangle-exclamation mr-1"></i> ' + totalMissingShifts + ' Sif Belum Terisi</span>';
+        let html = '<div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 p-4 items-stretch">';
+
+        missingList.forEach(item => {
+            let shiftBadges = item.missing.map(m => {
+                let nameInfo = m.assignedNames.length > 0 ? '<div class="text-[11px] font-medium text-red-800 mt-1 border-t border-red-200/60 pt-0.5">' + m.assignedNames.map(escapeHTML).join(', ') + '</div>' : '';
+                return '<div class="px-3 py-2 bg-red-100/90 border border-red-200 rounded-lg text-xs font-bold shadow-sm w-full flex flex-col justify-center"><div class="flex items-center gap-1.5"><i class="fa-solid fa-circle-exclamation text-red-500"></i> Sif ' + m.sif + '</div>' + nameInfo + '</div>';
+            }).join('');
+
+            html += '<div class="bg-red-50/60 border border-red-200 rounded-xl p-4 shadow-sm flex flex-col justify-between h-full hover:shadow-md transition"><div><div class="flex justify-between items-center mb-3 border-b border-red-100 pb-2"><span class="font-bold text-gray-800 text-sm flex items-center gap-1.5"><i class="fa-regular fa-calendar-days text-red-500"></i> ' + formatDate(item.tanggal) + '</span></div><div class="flex flex-col gap-2 flex-1 justify-start">' + shiftBadges + '</div></div></div>';
+        });
+
+        html += '</div>'; 
+        monitoringContainer.innerHTML = html;
+    }
+
+    function getAssignedForecasters(day, targetSif) {
+        if (!currentScheduleData || !currentScheduleData.forecasters) return [];
+        let result = []; 
+        let dayKey = String(day);
+        let padDayKey = dayKey.padStart(2, '0');
+
+        currentScheduleData.forecasters.forEach(f => {
+            let rawCode = (f.shifts && (f.shifts[dayKey] !== undefined ? f.shifts[dayKey] : f.shifts[padDayKey])) || '';
+            let code = String(rawCode).toUpperCase().trim();
+
+            if (targetSif === 'Pagi' && (code === 'P' || code === 'PAGI' || code === 'F')) result.push(f.nama);
+            else if (targetSif === 'Siang' && (code === 'S' || code === 'SIANG' || code === 'F')) result.push(f.nama);
+            else if (targetSif === 'Malam' && (code === 'M' || code === 'MALAM')) result.push(f.nama);
+        });
+        return [...new Set(result)];
+    }
+
+    // --- MODAL API SETTINGS LOGIC (GEMINI ONLY) ---
+    function openAiSettingsModal() {
+        document.getElementById('inputApiKeyField').value = sharedApiKey || "";
+        showCustomModal('modalAiSettings', 'aiSettingsBox');
+    }
+
+    function closeAiSettingsModal() {
+        hideCustomModal('modalAiSettings', 'aiSettingsBox');
+    }
+
+    async function saveAiSettings() {
+        const keyVal = document.getElementById('inputApiKeyField').value.trim();
+
+        if (!keyVal) {
+            await customAlert("API Key tidak boleh kosong!", "Peringatan", "warning");
+            return;
+        }
+
+        db.collection("settings").doc("gemini").set({
+            key: keyVal
+        }, { merge: true }).then(async () => {
+            sharedApiKey = keyVal;
+            closeAiSettingsModal();
+            await customAlert("API Key Google Gemini berhasil diperbarui di Cloud!", "Berhasil", "success");
+        }).catch(async err => {
+            await customAlert("Gagal menyimpan ke server: " + err.message, "Error", "error");
+        });
+    }
+
+    function mulaiEditJadwal() { isEditingSchedule = true; renderScheduleTable(); }
+    function batalEditJadwal() { isEditingSchedule = false; renderScheduleTable(); }
+    function tambahBarisJadwal() {
+        const tbody = document.getElementById('editJadwalTbody');
+        if (!tbody) return;
+        const rowsCount = tbody.querySelectorAll('tr').length;
+        const daysCount = parseInt(tbody.getAttribute('data-days'));
+        const tr = document.createElement('tr');
+        tr.className = 'edit-row bg-white hover:bg-gray-50 transition border-b';
+        
+        let dayCols = '';
+        for(let d=1; d<=daysCount; d++) {
+            dayCols += '<td class="p-0 border relative"><input type="text" class="w-full h-full text-center border-none p-1 text-xs outline-none focus:bg-blue-100 shift-input font-bold text-black" data-day="' + d + '" value="-" style="min-width:32px;"></td>';
+        }
+
+        tr.innerHTML = '<td class="p-1 border text-center"><input type="number" class="w-10 text-center border border-gray-300 rounded p-1 text-xs no-input outline-none focus:ring-1 focus:ring-blue-400" value="' + (rowsCount + 1) + '"></td>' +
+            '<td class="p-1 border"><input type="text" class="w-full border border-gray-300 rounded p-1 text-xs nama-input outline-none focus:ring-1 focus:ring-blue-400 font-semibold" value="Forecaster Baru"></td>' +
+            dayCols +
+            '<td class="p-1 border text-center"><button type="button" onclick="this.closest(\'tr\').remove()" class="text-red-500 hover:bg-red-100 p-1.5 rounded transition"><i class="fa-solid fa-trash-can"></i></button></td>';
+        
+        tbody.appendChild(tr);
+        tr.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    function simpanEditJadwal() {
+        const tbody = document.getElementById('editJadwalTbody');
+        if (!tbody) return;
+        const rows = tbody.querySelectorAll('.edit-row');
+        let newForecasters = [];
+        
+        rows.forEach(row => {
+            const noVal = parseInt(row.querySelector('.no-input').value) || 999;
+            const namaVal = row.querySelector('.nama-input').value.trim();
+            if(!namaVal) return; 
+            
+            let shifts = {};
+            const shiftInputs = row.querySelectorAll('.shift-input');
+            shiftInputs.forEach(inp => {
+                const day = inp.getAttribute('data-day');
+                const val = String(inp.value).trim().toUpperCase() || '-';
+                shifts[day] = val;
+            });
+            
+            newForecasters.push({ _no: noVal, nama: namaVal, shifts: shifts });
+        });
+        
+        newForecasters.sort((a, b) => a._no - b._no);
+        newForecasters = newForecasters.map(f => { delete f._no; return f; }); 
+
+        const { month, year, monthStr } = getValidatedFilter();
+        const docId = year + '-' + monthStr;
+
+        currentScheduleData = {
+            month: month,
+            year: year,
+            forecasters: newForecasters
+        };
+
+        db.collection("jadwal_dinas").doc(docId).set({
+            month: month,
+            year: year,
+            forecasters: newForecasters,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true }).then(async () => {
+            isEditingSchedule = false;
+            renderScheduleTable();
+            renderMonitoring();
+            await customAlert("Jadwal berhasil diperbarui dan siap untuk monitoring logbook!", "Berhasil", "success");
+        }).catch(async err => {
+            await customAlert("Gagal mengupdate jadwal: " + err.message, "Error", "error");
+        });
+    }
+
+    function renderScheduleTable() {
+        const container = document.getElementById('jadwalDisplayContainer');
+        const titleEl = document.getElementById('jadwalTitle');
+        if (!container) return;
+
+        const { month, year } = getValidatedFilter();
+        const monthName = monthNames[month - 1] || '';
+
+        const witaTime = getWitaDate();
+        const effectiveActiveDate = new Date(witaTime);
+        if (witaTime.getHours() < 8 || (witaTime.getHours() === 8 && witaTime.getMinutes() === 0)) {
+            effectiveActiveDate.setDate(effectiveActiveDate.getDate() - 1);
+        }
+        const activeDayNum = effectiveActiveDate.getDate(); 
+        const activeMonthNum = effectiveActiveDate.getMonth() + 1; 
+        const activeYearNum = effectiveActiveDate.getFullYear();
+
+        if(titleEl) titleEl.innerHTML = '<i class="fa-solid fa-calendar-days text-blue-600"></i> Jadwal Dinas Forecaster Bulan ' + monthName + ' Tahun&nbsp;' + year;
+
+        if (!currentScheduleData || !currentScheduleData.forecasters || currentScheduleData.forecasters.length === 0) {
+            container.innerHTML = '<div class="p-6 text-center text-gray-500 bg-gray-50 rounded-xl border border-dashed border-gray-200">Belum ada jadwal dinas yang didrop untuk <b>Bulan ' + monthName + ' Tahun&nbsp;' + year + '</b>.<br>Silakan drop/pilih file PDF/Gambar jadwal di atas untuk mengekstrak otomatis.</div>';
+            return;
+        }
+
+        const daysCount = new Date(year, month, 0).getDate(); 
+
+        if (isEditingSchedule) {
+            let tableHeaders = '<th class="px-2 py-2 border bg-gray-100 text-center w-12">No</th><th class="px-3 py-2 border bg-gray-100 min-w-[140px]">Nama Forecaster</th>';
+            for (let d = 1; d <= daysCount; d++) {
+                tableHeaders += '<th class="py-2 border bg-gray-100 text-center min-w-[32px] w-8">' + d + '</th>';
+            }
+            tableHeaders += '<th class="px-2 py-2 border bg-gray-100 text-center text-red-500"><i class="fa-solid fa-trash"></i></th>';
+
+            let tableRows = '';
+            currentScheduleData.forecasters.forEach((f, idx) => {
+                let dayCols = '';
+                for (let d = 1; d <= daysCount; d++) {
+                    let dayKey = String(d);
+                    let padDayKey = dayKey.padStart(2, '0');
+                    let code = (f.shifts && (f.shifts[dayKey] !== undefined ? f.shifts[dayKey] : f.shifts[padDayKey])) ? String(f.shifts[dayKey] !== undefined ? f.shifts[dayKey] : f.shifts[padDayKey]) : '-';
+                    dayCols += '<td class="p-0 border relative"><input type="text" class="w-full h-full text-center border-none p-1 text-xs outline-none focus:bg-blue-100 shift-input font-bold text-black" data-day="' + d + '" value="' + escapeHTML(code) + '" style="min-width:32px;"></td>';
+                }
+                tableRows += '<tr class="edit-row bg-white hover:bg-gray-50 transition border-b">' +
+                    '<td class="p-1 border text-center"><input type="number" class="w-10 text-center border border-gray-300 rounded p-1 text-xs no-input outline-none focus:ring-1 focus:ring-blue-400" value="' + (idx + 1) + '"></td>' +
+                    '<td class="p-1 border"><input type="text" class="w-full border border-gray-300 rounded p-1 text-xs nama-input outline-none focus:ring-1 focus:ring-blue-400 font-semibold" value="' + escapeHTML(f.nama) + '"></td>' +
+                    dayCols +
+                    '<td class="p-1 border text-center"><button type="button" onclick="this.closest(\'tr\').remove()" class="text-red-500 hover:bg-red-100 p-1.5 rounded transition"><i class="fa-solid fa-trash-can"></i></button></td>' +
+                '</tr>';
+            });
+
+            container.innerHTML = '<div class="flex justify-between items-center mb-3 flex-wrap gap-2">' +
+                '<span class="text-xs text-amber-800 font-bold bg-amber-100 px-3 py-1.5 rounded-lg border border-amber-300 shadow-sm animate-pulse flex items-center gap-1.5">' +
+                    '<i class="fa-solid fa-pen-to-square"></i> Mode Edit Jadwal Aktif' +
+                '</span>' +
+                '<div class="flex gap-2">' +
+                    '<button onclick="batalEditJadwal()" class="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-sm">' +
+                        '<i class="fa-solid fa-xmark"></i> Batal' +
+                    '</button>' +
+                    '<button onclick="simpanEditJadwal()" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-sm">' +
+                        '<i class="fa-solid fa-check"></i> Update Jadwal' +
+                    '</button>' +
+                '</div>' +
+            '</div>' +
+            '<div class="overflow-x-auto max-h-[400px] overflow-y-auto bg-gray-50 rounded-xl border border-blue-200 table-scroll-container shadow-inner">' +
+                '<table class="min-w-full text-left text-xs whitespace-nowrap border-collapse">' +
+                    '<thead class="sticky top-0 z-10 shadow-sm">' +
+                        '<tr>' + tableHeaders + '</tr>' +
+                    '</thead>' +
+                    '<tbody id="editJadwalTbody" data-days="' + daysCount + '">' + tableRows + '</tbody>' +
+                '</table>' +
+            '</div>' +
+            '<div class="mt-3">' +
+                '<button onclick="tambahBarisJadwal()" class="bg-blue-50 hover:bg-blue-100 text-blue-700 px-3 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-sm border border-blue-200">' +
+                    '<i class="fa-solid fa-plus"></i> Tambah Baris Forecaster' +
+                '</button>' +
+            '</div>';
+        } else {
+            let tableHeaders = '<th class="px-2 py-2 border bg-gray-100 text-center w-10">No</th><th class="px-3 py-2 border bg-gray-100 min-w-[140px]">Nama Forecaster</th>';
+            for (let d = 1; d <= daysCount; d++) {
+                let isActiveDay = (d === activeDayNum && month === activeMonthNum && year === activeYearNum);
+                let thClass = 'py-2 border text-center min-w-[32px] w-8 max-w-[32px] relative ' + (isActiveDay ? 'bg-pink-200 text-pink-900 font-bold' : 'bg-gray-100');
+                let overlayHeader = isActiveDay ? '<div class="absolute -inset-px border-x-2 border-t-2 border-pink-500 pointer-events-none z-10"></div>' : '';
+                tableHeaders += '<th class="' + thClass + '">' + d + overlayHeader + '</th>';
+            }
+
+            let tableRows = '';
+            currentScheduleData.forecasters.forEach((f, idx) => {
+                let dayCols = '';
+                let isLastRow = (idx === currentScheduleData.forecasters.length - 1);
+
+                let d = 1;
+                while (d <= daysCount) {
+                    let dayKey = String(d);
+                    let padDayKey = dayKey.padStart(2, '0');
+                    let code = (f.shifts && (f.shifts[dayKey] !== undefined ? f.shifts[dayKey] : f.shifts[padDayKey])) ? String(f.shifts[dayKey] !== undefined ? f.shifts[dayKey] : f.shifts[padDayKey]) : '-';
+                    let upperCode = code.toUpperCase().trim();
+                    
+                    let spanLength = 1;
+                    if (upperCode.length > 1) { 
+                        for (let nextD = d + 1; nextD <= daysCount; nextD++) {
+                            let nextDayKey = String(nextD);
+                            let nextPadKey = nextDayKey.padStart(2, '0');
+                            let nextCode = (f.shifts && (f.shifts[nextDayKey] !== undefined ? f.shifts[nextDayKey] : f.shifts[nextPadKey])) ? String(f.shifts[nextDayKey] !== undefined ? f.shifts[nextDayKey] : f.shifts[nextPadKey]) : '-';
+                            if (nextCode.toUpperCase().trim() === upperCode) spanLength++; else break;
+                        }
+                    }
+
+                    let isActiveDayInSpan = false; let offset = 0;
+                    if (month === activeMonthNum && year === activeYearNum) {
+                        if (activeDayNum >= d && activeDayNum < d + spanLength) { isActiveDayInSpan = true; offset = activeDayNum - d; }
+                    }
+
+                    let bgClass = '';
+                    if(upperCode === 'P') bgClass = 'bg-[#bbf7d0] text-black font-bold'; 
+                    else if(upperCode === 'S') bgClass = 'bg-[#fef08a] text-black font-bold'; 
+                    else if(upperCode === 'M') bgClass = 'bg-[#bfdbfe] text-black font-bold'; 
+                    else if(upperCode === 'F') bgClass = 'bg-[#e9d5ff] text-black font-bold'; 
+                    else bgClass = 'bg-white text-black font-medium'; 
+
+                    let bottomBorder = isLastRow ? 'border-b-2' : ''; let overlayBody = '';
+                    if (isActiveDayInSpan) {
+                        if (spanLength === 1) overlayBody = '<div class="absolute -inset-px bg-pink-500/20 border-x-2 ' + bottomBorder + ' border-pink-500 pointer-events-none z-10"></div>';
+                        else {
+                            let leftPct = (offset / spanLength) * 100; let widthPct = (1 / spanLength) * 100;
+                            overlayBody = '<div class="absolute -top-px -bottom-px bg-pink-500/20 border-x-2 ' + bottomBorder + ' border-pink-500 pointer-events-none z-10" style="left: calc(' + leftPct + '% - 1px); width: calc(' + widthPct + '% + 2px);"></div>';
+                        }
+                    }
+
+                    let colspanAttr = spanLength > 1 ? ' colspan="' + spanLength + '"' : '';
+
+                    dayCols += '<td class="px-0.5 py-1.5 border text-center text-[10px] relative ' + bgClass + '" title="' + escapeHTML(code) + '"' + colspanAttr + '>' +
+                                '<div class="relative z-20 w-full overflow-hidden text-ellipsis whitespace-nowrap">' + escapeHTML(code) + '</div>' +
+                                overlayBody +
+                            '</td>';
+
+                    d += spanLength;
+                }
+
+                tableRows += '<tr class="hover:bg-gray-50 transition"><td class="px-3 py-2 border text-center font-bold text-gray-600">' + (idx + 1) + '</td><td class="px-4 py-2 border font-semibold text-gray-800 text-xs">' + escapeHTML(f.nama) + '</td>' + dayCols + '</tr>';
+            });
+
+            container.innerHTML = '<div class="flex justify-between items-center mb-3 flex-wrap gap-2">' +
+                '<span class="text-xs text-gray-500 font-medium"><i class="fa-solid fa-circle-info text-blue-500"></i> Keterangan: P (Pagi - Hijau), S (Siang - Kuning), M (Malam - Biru), F (Pagi & Siang - Ungu), L / CUTI / DL (Ket. Blok Putih)</span>' +
+                '<div class="flex gap-2">' +
+                    '<button onclick="mulaiEditJadwal()" class="bg-amber-100 hover:bg-amber-200 text-amber-700 px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-sm">' +
+                        '<i class="fa-solid fa-pen-to-square"></i> Edit Jadwal' +
+                    '</button>' +
+                    '<button onclick="deleteSchedule()" class="bg-red-100 hover:bg-red-200 text-red-700 px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-sm">' +
+                        '<i class="fa-solid fa-trash-can"></i> Hapus Jadwal' +
+                    '</button>' +
+                '</div>' +
+            '</div>' +
+            '<div class="overflow-x-auto max-h-[350px] overflow-y-auto bg-white rounded-xl border border-gray-200 table-scroll-container">' +
+                '<table class="min-w-full text-left text-xs whitespace-nowrap border-collapse">' +
+                    '<thead class="sticky top-0 z-10">' +
+                        '<tr>' + tableHeaders + '</tr>' +
+                    '</thead>' +
+                    '<tbody>' + tableRows + '</tbody>' +
+                '</table>' +
+            '</div>';
+        }
+    }
+
+    async function deleteSchedule() {
+        const { month, year, monthStr } = getValidatedFilter();
+        const docId = year + '-' + monthStr;
+
+        const confirmed = await customConfirm('Apakah Anda yakin ingin menghapus data jadwal dinas Bulan <b>' + monthNames[month-1] + '</b> Tahun&nbsp;<b>' + year + '</b>?', "Hapus Jadwal");
+        if(confirmed) {
+            currentScheduleData = null;
+            renderScheduleTable();
+            renderMonitoring();
+            db.collection("jadwal_dinas").doc(docId).delete()
+            .then(async () => await customAlert("Jadwal dinas berhasil dihapus dari cloud!", "Berhasil", "success"))
+            .catch(async err => await customAlert("Gagal menghapus: " + err.message, "Error", "error"));
+        }
+    }
+
+    // --- DROPZONE & GEMINI AI EXTRACTION ROUTER ---
+    const dropzoneArea = document.getElementById('dropzoneArea');
+    const fileJadwalInput = document.getElementById('fileJadwalInput');
+    const dropzoneLoading = document.getElementById('dropzoneLoading');
+
+    ['dragenter', 'dragover'].forEach(eventName => { 
+        dropzoneArea.addEventListener(eventName, (e) => { 
+            e.preventDefault(); 
+            e.stopPropagation();
+            dropzoneArea.classList.add('drag-over'); 
+        }, false); 
+    });
+    ['dragleave', 'drop'].forEach(eventName => { 
+        dropzoneArea.addEventListener(eventName, (e) => { 
+            e.preventDefault(); 
+            e.stopPropagation();
+            dropzoneArea.classList.remove('drag-over'); 
+        }, false); 
+    });
+    dropzoneArea.addEventListener('drop', (e) => { 
+        let dt = e.dataTransfer; 
+        let files = dt.files; 
+        if (files && files.length > 0) processScheduleFileWithGeminiPro(files[0]); 
+    });
+    fileJadwalInput.addEventListener('change', (e) => { 
+        if (e.target.files && e.target.files.length > 0) processScheduleFileWithGeminiPro(e.target.files[0]); 
+    });
+
+    async function processScheduleFileWithGeminiPro(file) {
+        if (isProcessingSchedule) return;
+        
+        if (file.size > 20 * 1024 * 1024) {
+            await customAlert("Ukuran file terlalu besar! Maksimal ukuran file adalah 20MB.", "Peringatan", "warning");
+            fileJadwalInput.value = '';
+            return;
+        }
+
+        let apiKey = sharedApiKey;
+
+        if (!apiKey) {
+            openAiSettingsModal();
+            fileJadwalInput.value = '';
+            return;
+        }
+
+        isProcessingSchedule = true;
+        dropzoneLoading.classList.remove('hidden');
+        const loadingText = document.getElementById('dropzoneLoadingText');
+        loadingText.innerHTML = 'Menyiapkan Gemini AI...';
+
+        try {
+            const base64Data = await new Promise((resolve, reject) => {
+                const reader = new FileReader(); 
+                reader.onload = () => resolve(reader.result.split(',')[1]); 
+                reader.onerror = error => reject(error); 
+                reader.readAsDataURL(file);
+            });
+
+            const { month, year, monthStr } = getValidatedFilter();
+            const daysInMonth = new Date(year, month, 0).getDate();
+
+            let mimeType = file.type;
+            if (!mimeType) {
+                const ext = file.name.split('.').pop().toLowerCase();
+                if (ext === 'pdf') mimeType = 'application/pdf';
+                else if (ext === 'jpg' || ext === 'jpeg') mimeType = 'image/jpeg';
+                else if (ext === 'png') mimeType = 'image/png';
+                else if (ext === 'webp') mimeType = 'image/webp';
+                else mimeType = 'application/pdf';
+            }
+
+            const promptText = 'Kamu adalah sistem ekstraksi AI tingkat lanjut untuk jadwal dinas BMKG. Tugasmu mengekstrak data jadwal secara PRESISI AKURAT.\n\nATURAN EKSTRAKSI VISUAL (SANGAT KETAT):\n1. FILTER PERSONEL (WAJIB): Telusuri SEMUA baris nama pegawai dari atas ke bawah (dari nomor 1 sampai akhir tabel). Kamu HANYA BOLEH mengekstrak pegawai yang memiliki MINIMAL SATU sel kalender dengan LATAR BELAKANG WARNA KUNING pada barisnya.\n   - Jika seorang pegawai TIDAK MEMILIKI warna kuning sama sekali (misal: hanya full hijau/biru/putih), maka JANGAN masukkan dia ke hasil JSON. ABAIKAN SEPENUHNYA!\n   - Jika dia memiliki setidaknya satu sel kuning (meski dia dari kelompok Observer), masukkan dia ke JSON.\n2. PENYELARASAN TANGGAL & MERGED CELLS:\n   - Kolom tanggal berurut dari 1 sampai ' + daysInMonth + '.\n   - Sel Gabungan (Merged Cells): Jika ada teks memanjang melintasi banyak kolom (contoh: "DIKLAT LATSAR"), hitung rentang kolomnya dan DUPLIKASI teks tersebut ke setiap tanggal yang ter-cover (misal: isi tanggal 1 sampai 21 dengan "DIKLAT LATSAR"). WAJIB agar sisa tanggal di kanannya tidak bergeser!\n3. KLASIFIKASI KODE SIF:\n   - Untuk pegawai yang lolos filter No 1, rekam seluruh isi sel dari tanggal 1 hingga ' + daysInMonth + '.\n   - Tulis kode sif sesuai huruf di dalamnya (P, S, M, F, L, dll). Jika kosong, tulis "-".\n\nKembalikan HANYA format JSON murni, tanpa markdown ```json:\n{"forecasters": [{"nama": "NAMA", "shifts": {"1": "P", "2": "L", "3": "L", "' + daysInMonth + '": "M"}}]}';
+
+            let cleanJsonText = "";
+
+            let selectedModelsToTry = ['gemini-1.5-flash', 'gemini-1.5-pro'];
+
+            let response = null; 
+            let lastErrorMessage = '';
+            
+            for (let i = 0; i < selectedModelsToTry.length; i++) {
+                const model = selectedModelsToTry[i];
+                loadingText.innerHTML = 'Mengekstrak Jadwal (' + model + ')...';
+                
+                try {
+                    const apiUrl = "[https://generativelanguage.googleapis.com/v1beta/models/](https://generativelanguage.googleapis.com/v1beta/models/)" + model + ":generateContent?key=" + apiKey.trim();
+                    response = await fetch(apiUrl, {
+                        method: 'POST', 
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{ parts: [{ inline_data: { mime_type: mimeType, data: base64Data } }, { text: promptText }] }],
+                            generationConfig: { response_mime_type: "application/json" }
+                        })
+                    });
+                    
+                    if (response.ok) break; 
+                    
+                    const errText = await response.text(); 
+                    let errJson = {};
+                    try { if(errText.trim()) errJson = JSON.parse(errText); } catch(e) {}
+                    
+                    if (response.status === 404) {
+                        lastErrorMessage = "Model AI tidak ditemukan atau sedang di-maintenance oleh Google (Error 404).";
+                    } else if (response.status === 400 && errJson.error && errJson.error.message && errJson.error.message.includes("API key not valid")) {
+                        lastErrorMessage = "API Key Google Anda tidak valid atau salah ketik.";
+                        break; 
+                    } else {
+                        lastErrorMessage = (errJson.error && errJson.error.message) ? errJson.error.message : "Server error " + response.status;
+                    }
+                    
+                    if (response.status === 401 || response.status === 403) {
+                         lastErrorMessage = "API Key Anda dibatasi atau tidak memiliki akses. (Error " + response.status + ")";
+                         break;
+                    }
+                    
+                    if (i < selectedModelsToTry.length - 1) {
+                        loadingText.innerHTML = 'AI utama sibuk, mencoba jalur cadangan...';
+                        await new Promise(r => setTimeout(r, 2000));
+                    }
+                } catch (e) { 
+                    lastErrorMessage = e.message; 
+                    if (i < selectedModelsToTry.length - 1) {
+                        await new Promise(r => setTimeout(r, 2000));
+                    }
+                }
+            }
+
+            if (!response || !response.ok) throw new Error(lastErrorMessage || "Gagal memanggil Gemini AI.");
+
+            const resText = await response.text();
+            if (!resText.trim()) throw new Error("Balasan dari AI System kosong.");
+            const resData = JSON.parse(resText);
+            
+            const candidate = resData.candidates && resData.candidates[0];
+            if (!candidate || !candidate.content || !candidate.content.parts || !candidate.content.parts[0] || !candidate.content.parts[0].text) {
+                throw new Error("Respon AI tidak valid.");
+            }
+
+            cleanJsonText = candidate.content.parts[0].text;
+
+            // CLEANING JSON RESPONSE
+            cleanJsonText = cleanJsonText.replace(/```json/gi, '').replace(/```/g, '').trim();
+            const jsonMatch = cleanJsonText.match(/\{[\s\S]*\}/);
+            if (jsonMatch) cleanJsonText = jsonMatch[0];
+
+            const parsedData = JSON.parse(cleanJsonText);
+            if (!parsedData.forecasters || !Array.isArray(parsedData.forecasters)) throw new Error("Format JSON tidak sesuai.");
+            
+            const docId = year + '-' + monthStr;
+
+            currentScheduleData = {
+                month: month,
+                year: year,
+                forecasters: parsedData.forecasters
+            };
+
+            await db.collection("jadwal_dinas").doc(docId).set({
+                month: month, year: year, forecasters: parsedData.forecasters, updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+
+            dropzoneLoading.classList.add('hidden'); 
+            fileJadwalInput.value = '';
+            isEditingSchedule = false; 
+            renderScheduleTable();
+            renderMonitoring();
+            await customAlert('Jadwal Forecaster berhasil diekstrak!', "Berhasil", "success");
+
+        } catch (err) {
+            dropzoneLoading.classList.add('hidden'); 
+            fileJadwalInput.value = ''; 
+            
+            let finalErrorMsg = err.message;
+            if (finalErrorMsg === 'Failed to fetch' || finalErrorMsg.includes('NetworkError')) {
+                finalErrorMsg = "Gagal menghubungi server Google Gemini. Pastikan Anda terkoneksi ke internet dan tidak diblokir oleh firewall kantor.";
+            }
+
+            await customAlert("Ekstraksi Gagal: " + finalErrorMsg, "Error", "error");
+        } finally {
+            isProcessingSchedule = false;
+        }
+    }
+
+    function getBase64ImageFromElement(imgElement) {
+        if (!imgElement || !imgElement.complete || !imgElement.naturalWidth) return null;
+        try {
+            var canvas = document.createElement("canvas");
+            canvas.width = imgElement.naturalWidth;
+            canvas.height = imgElement.naturalHeight;
+            var ctx = canvas.getContext("2d");
+            ctx.fillStyle = "#FFFFFF";
+            ctx.fillRect(0, 0, canvas.width, canvas.height); 
+            ctx.drawImage(imgElement, 0, 0);
+            return canvas.toDataURL("image/png");
+        } catch(e) {
+            console.warn("Gagal konversi gambar ke Base64 (CORS):", e);
+            return null;
+        }
+    }
+
+    // --- 7. GENERATE PDF ---
+    async function generatePDF(action) {
+        const { month, year, monthStr } = getValidatedFilter();
+
+        const filtered = currentLogs.filter(log => {
+            if(!log.tanggal) return false;
+            const parts = log.tanggal.split('-'); if(parts.length !== 3) return false;
+            return parseInt(parts[1]) === month && parseInt(parts[0]) === year;
+        });
+
+        if(filtered.length === 0) { 
+            await customAlert("Tidak ada data logbook pada bulan dan tahun yang Anda pilih!", "Data Kosong", "warning"); 
+            return; 
+        }
+
+        try {
+            const pdfData = [...filtered];
+            pdfData.sort((a, b) => {
+                if (a.tanggal !== b.tanggal) return a.tanggal.localeCompare(b.tanggal);
+                return (sifWeight[a.sif] || 99) - (sifWeight[b.sif] || 99);
+            });
+
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+            const coverW = doc.internal.pageSize.getWidth(); const coverH = doc.internal.pageSize.getHeight();
+
+            const logoEl = document.getElementById('bmkgLogo'); 
+            if(logoEl) {
+                try {
+                    const logoBase64 = getBase64ImageFromElement(logoEl);
+                    if (logoBase64) {
+                        const naturalW = logoEl.naturalWidth || 1;
+                        const naturalH = logoEl.naturalHeight || 1;
+                        const imgRatio = naturalH / naturalW;
+                        const targetW = 45;
+                        const targetH = targetW * imgRatio;
+                        doc.addImage(logoBase64, 'PNG', (coverW - targetW) / 2, 35, targetW, targetH, undefined, 'FAST');
+                    }
+                } catch(e) { console.warn("Logo BMKG tidak dapat dimuat ke Cover PDF", e); }
+            }
+
+            doc.setFontSize(24); doc.setFont("helvetica", "bold"); doc.setTextColor(0, 0, 0);
+            doc.text("LOGBOOK KEGIATAN HARIAN", coverW / 2, 115, { align: 'center' });
+            doc.text("FORECASTER", coverW / 2, 127, { align: 'center' });
+            doc.setFontSize(16); const monthNameUpper = monthNames[month - 1].toUpperCase(); doc.text(monthNameUpper + ' ' + year, coverW / 2, 145, { align: 'center' });
+            doc.setFontSize(14); doc.text("BADAN METEOROLOGI KLIMATOLOGI DAN GEOFISIKA", coverW / 2, coverH - 40, { align: 'center' });
+            doc.text("STASIUN METEOROLOGI JUWATA", coverW / 2, coverH - 32, { align: 'center' });
+
+            doc.addPage();
+            doc.setFontSize(14); doc.text("REKAP LOGBOOK FORECASTER - STASIUN METEOROLOGI JUWATA", 14, 15);
+            doc.setFontSize(10); doc.setFont("helvetica", "normal"); doc.text('Periode: Bulan ' + monthNames[month - 1] + ' - Tahun ' + year, 14, 21);
+
+            const tableRows = pdfData.map((log, index) => {
+                let tugasDetail = "";
+                
+                if (log.isTukarDinas && log.menggantikan) {
+                    tugasDetail += 'Mengisi jadwal dinasnya ' + log.menggantikan + '\n\n';
+                }
+
+                if(Array.isArray(log.flightDocs) && log.flightDocs.length > 0) tugasDetail += 'Flight Doc: ' + log.flightDocs.map(String).join(', ') + '\n'; else tugasDetail += 'Flight Doc: Tidak Ada\n';
+                let sifKhususText = (log.tugasSifKhusus && Array.isArray(log.tugasSifKhusus)) ? [...log.tugasSifKhusus].map(String) : [];
+                if(!sifKhususText.some(t => t.toLowerCase().includes('nowcasting'))) sifKhususText.push('Nowcasting: Tidak ada');
+                if(!sifKhususText.some(t => t.toLowerCase().includes('ad/ws warning'))) sifKhususText.push('AD/WS Warning: Tidak Ada');
+                
+                sifKhususText = sifKhususText.map(t => {
+                    if (t.toLowerCase().includes('cuaca 3 harian')) {
+                        let noteMatch = t.match(/\((.*)\)$/);
+                        let note = noteMatch ? ' (' + noteMatch[1] + ')' : '';
+                        let statusTextOnly = t.replace(/\(.*?\)/g, '').toLowerCase();
+                        if (statusTextOnly.includes('sudah')) {
+                            return 'PD Cuaca 3 harian sudah diseminasikan' + note;
+                        } else if (statusTextOnly.includes('belum')) {
+                            return 'PD Cuaca 3 harian belum diseminasikan' + note;
+                        }
+                    }
+                    return t;
+                });
+
+                if(sifKhususText.length > 0) tugasDetail += sifKhususText.join('\n') + '\n';
+                if(Array.isArray(log.tugasTambahan) && log.tugasTambahan.length > 0) tugasDetail += 'Tugas Tambahan:\n - ' + log.tugasTambahan.map(String).join('\n - ');
+
+                let finalName = formatForecasterNames(log.nama) || '-';
+
+                return [ index + 1, finalName, formatDate(log.tanggal) + '\n(Sif ' + log.sif + ')', tugasDetail.trim() || '-', log.catatan || '-', '' ];
+            });
+
+            doc.autoTable({
+                startY: 26, 
+                head: [['No', 'Nama Forecaster', 'Tgl. & Sif', 'Detail Pekerjaan', 'Catatan Dinas', 'TTD']], 
+                body: tableRows, 
+                theme: 'grid',
+                margin: { top: 26, bottom: 18, left: 14, right: 14 },
+                styles: { fontSize: 8, cellPadding: 3, lineColor: [0, 0, 0], lineWidth: 0.2, textColor: [0, 0, 0] },
+                headStyles: { fillColor: [220, 220, 220], textColor: [0, 0, 0], fontStyle: 'bold', halign: 'center', valign: 'middle', lineColor: [0, 0, 0], lineWidth: 0.2, minCellHeight: 0, cellPadding: { top: 2.5, bottom: 2.5, left: 2, right: 2 } },
+                bodyStyles: { textColor: [0, 0, 0], lineColor: [0, 0, 0], lineWidth: 0.2, valign: 'middle', minCellHeight: 18 },
+                columnStyles: { 0: { cellWidth: 10, halign: 'center' }, 1: { cellWidth: 35 }, 2: { cellWidth: 28, halign: 'center' }, 3: { cellWidth: 100 }, 4: { cellWidth: 60 }, 5: { cellWidth: 35, halign: 'center' } },
+                didDrawCell: function(data) {
+                    if (data.section === 'body' && data.column.index === 5) {
+                        const rowLog = pdfData[data.row.index];
+                        if (rowLog && rowLog.tandaTangan) {
+                            try {
+                                const imgWidth = 28; const imgHeight = 14; const x = data.cell.x + (data.cell.width - imgWidth) / 2; const y = data.cell.y + (data.cell.height - imgHeight) / 2;
+                                doc.addImage(rowLog.tandaTangan, 'PNG', x, y, imgWidth, imgHeight, undefined, 'FAST');
+                            } catch (e) { console.error("Gagal menambahkan tanda tangan:", e); }
+                        }
+                    }
+                }
+            });
+
+            const pageCount = doc.internal.getNumberOfPages();
+            for (let i = 2; i <= pageCount; i++) {
+                doc.setPage(i); doc.setFontSize(9); doc.setTextColor(100, 100, 100);
+                const pageWidth = doc.internal.pageSize.width || doc.internal.pageSize.getWidth(); const pageHeight = doc.internal.pageSize.height || doc.internal.pageSize.getHeight();
+                doc.text(String(i - 1), pageWidth - 14, pageHeight - 10, { align: 'right' });
+            }
+
+            if (action === 'download') {
+                doc.save(monthStr + year + '_Logbook Forecaster Stamet Juwata.pdf');
+            } else {
+                const blob = doc.output('blob');
+                const blobUrl = URL.createObjectURL(blob);
+                const pdfWindow = window.open(blobUrl, '_blank');
+                
+                if (!pdfWindow) {
+                    await customAlert("Pop-up diblokir oleh peramban! Harap izinkan pop-up (Allow Pop-ups) untuk situs ini agar PDF bisa ditampilkan.", "Peringatan", "warning");
+                }
+            }
+        } catch (err) { 
+            await customAlert("Terjadi kesalahan memproses PDF: " + err.message, "Error", "error"); 
+        } 
+    }
+</script>
+</body>
+</html>
